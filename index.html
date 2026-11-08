@@ -347,6 +347,10 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
     <input id="tmKey" autocomplete="off" spellcheck="false">
     <p class="hint">Free from developer.ticketmaster.com (the “Consumer Key”).</p>
 
+    <label for="skKey">Skiddle API key <span style="font-weight:400;color:var(--muted)">(optional, UK only)</span></label>
+    <input id="skKey" autocomplete="off" spellcheck="false">
+    <p class="hint">Adds gigs from Skiddle, which is strong on smaller venues and festivals. Free from skiddle.com/api/join.php.</p>
+
     <div class="twocol">
       <div>
         <label for="country">Country</label>
@@ -418,11 +422,13 @@ const COUNTRIES = [['GB','United Kingdom'],['IE','Ireland'],['US','United States
 // so friends only have to sign in to Spotify and set their location.
 // Your PayPal.me link for the Donate button, for example 'https://paypal.me/yourname'. Leave blank to hide the button.
 const DONATE_URL = 'https://paypal.me/YOUR-PAYPAL-NAME';
-const PRESET = { clientId: 'fdb820d5316249259c6c8e8a2c7564e0', tmKey: 'UI5zEIYSdUARAIU1j7tupInAGgyU7PVR' };
-const DEFAULTS = {clientId:PRESET.clientId, tmKey:PRESET.tmKey, country:'GB', lat:null, lng:null, place:'', radius:50, followed:true, top:true, saved:true, maxArtists:150};
+// skKey: your free Skiddle API key (UK gigs). Leave blank to search Ticketmaster only.
+const PRESET = { skKey: 'df412522bbf34a763f1e2b7e761ff43a', clientId: 'fdb820d5316249259c6c8e8a2c7564e0', tmKey: 'UI5zEIYSdUARAIU1j7tupInAGgyU7PVR' };
+const DEFAULTS = {clientId:PRESET.clientId, tmKey:PRESET.tmKey, skKey:PRESET.skKey, country:'GB', lat:null, lng:null, place:'', radius:50, followed:true, top:true, saved:true, maxArtists:150};
 let settings = Object.assign({}, DEFAULTS, store.get('gigcal.settings', {}));
 if (!settings.clientId) settings.clientId = PRESET.clientId;
 if (!settings.tmKey) settings.tmKey = PRESET.tmKey;
+if (!settings.skKey) settings.skKey = PRESET.skKey || '';
 let cache = store.get('gigcal.cache', null);
 let going = store.get('gigcal.going', {}); // id -> { ev, hotel: 'todo' | 'booked' | 'none' }
 const saveGoing = () => store.set('gigcal.going', going);
@@ -557,11 +563,60 @@ function pickTm(imgs){
   const thumb = by('4_3', 200) || by('3_2', 200) || by('1_1', 200) || by('16_9', 200) || hero;
   return { img: hero ? hero.url : '', thumb: thumb ? thumb.url : '' };
 }
+/* Skiddle: UK listings, strong on smaller venues and festivals */
+let skOk = false, skProblem = '';
+async function sk(params){
+  const u = 'https://www.skiddle.com/api/v1/events/search/?' + new URLSearchParams(Object.assign({ api_key: settings.skKey }, params));
+  for (let i = 0; i < 3; i++){
+    let r;
+    try { r = await fetch(u); } catch(e){ throw new Error('sknet'); }
+    if (r.status === 429){ await sleep(1500 * (i + 1)); continue; }
+    if (r.status === 401 || r.status === 403) throw new Error('skkey');
+    if (!r.ok) throw new Error('skiddle ' + r.status);
+    const d = await r.json();
+    if (d && d.error && String(d.error) !== '0') throw new Error(/key/i.test(d.errormessage || '') ? 'skkey' : 'skiddle');
+    return d;
+  }
+  return {};
+}
+async function skiddleCheck(){
+  skOk = false; skProblem = '';
+  if (!settings.skKey || settings.country !== 'GB') return;
+  try { await sk({ keyword: 'music', limit: '1', country: 'GB' }); skOk = true; }
+  catch(e){ skProblem = e.message === 'skkey' ? 'Skiddle rejected its API key, so only Ticketmaster was searched.' : 'Couldn’t reach Skiddle, so only Ticketmaster was searched.'; }
+}
+const miles2 = (a, b) => (a.lat != null && b.lat != null && !isNaN(a.lat) && !isNaN(b.lat)) ? miles(a.lat, a.lng, b.lat, b.lng) : null;
+function sameGig(x, y){
+  if (x.date !== y.date) return false;
+  if (!x.artists.some(n => y.artists.some(m => norm(n) === norm(m)))) return false;
+  const d = miles2(x, y);
+  return d != null ? d < 1.5 : norm(x.city) === norm(y.city);
+}
+function fromSkiddle(ev, a){
+  const v = ev.venue || {};
+  const date = String(ev.date || ev.startdate || '').slice(0, 10);
+  const time = (String(ev.startdate || '').match(/T(\d\d:\d\d)/) || [])[1] || (ev.openingtimes?.doorsopen || '');
+  return { id: 'sk-' + ev.id, title: ev.eventname || '', artists: [a.name], date, time: time ? time.slice(0,5) + ':00' : '',
+    venue: v.name || '', city: v.town || '', lat: v.latitude != null ? parseFloat(v.latitude) : null, lng: v.longitude != null ? parseFloat(v.longitude) : null,
+    url: ev.link || '', status: '', img: ev.largeimageurl || ev.imageurl || '', thumb: ev.imageurl || ev.largeimageurl || '', artistImg: a.img || '',
+    price: ev.entryprice ? String(ev.entryprice) : '', priceSrc: 'Skiddle', links: ev.link ? [{ src: 'Skiddle', url: ev.link }] : [] };
+}
+function skiddleMatches(ev, a){
+  if (String(ev.cancelled || '0') !== '0') return false;
+  const names = (ev.artists || []).map(x => x.name || x.artistname || '').filter(Boolean);
+  if (names.length) return names.some(n => norm(n) === norm(a.name));
+  const t = norm(ev.eventname), n = norm(a.name);
+  return n.length >= 4 && (t === n || t.startsWith(n));   // no line-up listed: only trust names at the start of the title
+}
+
 async function findGigs(artists){
   const byId = new Map(), bySlot = new Map();
+  await skiddleCheck();
+  const today = keyOf(new Date());
   for (let i = 0; i < artists.length; i++){
     const a = artists[i];
     setStatus(`Checking ${a.name} (${i+1} of ${artists.length})…`);
+    const skJob = skOk ? sk({ keyword: a.name, country: 'GB', minDate: today, description: '1', limit: '100', order: 'date' }).catch(e => { if (e.message === 'skkey'){ skOk = false; skProblem = 'Skiddle rejected its API key partway through.'; } return {}; }) : Promise.resolve(null);
     try {
       const d = await tm({ keyword: a.name, countryCode: settings.country, classificationName: 'music', size: '50', sort: 'date,asc' });
       for (const ev of (d._embedded?.events || [])){
@@ -575,10 +630,24 @@ async function findGigs(artists){
         const e = { id: ev.id, title: ev.name, artists: [a.name], date: st.localDate, time: st.localTime || '',
           venue: v.name || '', city: v.city?.name || '',
           lat: v.location ? parseFloat(v.location.latitude) : null, lng: v.location ? parseFloat(v.location.longitude) : null,
-          url: ev.url || '', status: ev.dates?.status?.code || '', ...pickTm(ev.images), artistImg: a.img || '' };
+          url: ev.url || '', status: ev.dates?.status?.code || '', ...pickTm(ev.images), artistImg: a.img || '',
+          links: ev.url ? [{ src: 'Ticketmaster', url: ev.url }] : [] };
         byId.set(ev.id, e); bySlot.set(slot, e);
       }
     } catch(e){ if (e.message === 'tmkey') throw e; }
+    const sd = await skJob;
+    for (const ev of (sd?.results || [])){
+      if (!skiddleMatches(ev, a)) continue;
+      const e = fromSkiddle(ev, a);
+      if (!e.date) continue;
+      const twin = [...byId.values()].find(x => sameGig(x, e));
+      if (twin){
+        if (!(twin.links || []).some(l => l.src === 'Skiddle')) twin.links = [...(twin.links || []), ...e.links];
+        if (!twin.price && e.price){ twin.price = e.price; twin.priceSrc = 'Skiddle'; }
+        continue;
+      }
+      if (!byId.has(e.id)){ byId.set(e.id, e); bySlot.set(e.date + '|' + norm(e.venue), e); }
+    }
     await sleep(240);
   }
   return [...byId.values()].sort((x,y) => (x.date + x.time).localeCompare(y.date + y.time));
@@ -611,7 +680,7 @@ async function scan(){
     for (const id in going){ const fresh = events.find(e => e.id === id); if (fresh) going[id].ev = fresh; }
     saveGoing();
     const newMsg = prev ? (added ? `Found ${added} new ${added === 1 ? 'gig' : 'gigs'} since your last scan.` : 'No new gigs since your last scan.') : '';
-    setStatus([newMsg, problems.length ? `Spotify wouldn’t share your ${problems.join(' or ')}.` : ''].filter(Boolean).join(' '));
+    setStatus([newMsg, problems.length ? `Spotify wouldn’t share your ${problems.join(' or ')}.` : '', skProblem].filter(Boolean).join(' '));
     if (added) view.filter = 'new';
     render();
   } catch(e){
@@ -993,12 +1062,13 @@ function openEvent(id){
     <p class="meta">${esc(fmtLong(e.date))}${e.time ? ', ' + fmtTime(e.time) : ''}</p>
     ${g ? `<p class="goingnote">You\u2019re going. ${n > 1 ? n + ' days to go' : n === 1 ? 'It\u2019s tomorrow' : n === 0 ? 'It\u2019s today' : 'This one\u2019s been and gone'}${n >= 0 ? '. Hotel: ' + HOTEL[g.hotel].toLowerCase() : ''}.</p>` : ''}
     ${e.title && norm(e.title) !== norm(e.artists.join('')) ? `<p>${esc(e.title)}</p>` : ''}
+    ${e.price ? `<p>Tickets from ${esc(e.price)}${e.priceSrc ? ' on ' + esc(e.priceSrc) : ''}</p>` : ''}
     <p><strong>${esc(e.venue)}</strong><br>${esc(e.city)}${e.dist != null ? `<br><span style="color:var(--muted)">${esc(distText(e))} from you</span>` : ''}</p>
     ${({ offsale: 'Tickets aren’t on sale right now', postponed: 'This gig has been postponed', rescheduled: 'This gig has been rescheduled' })[e.status] ? `<p class="alert">${({ offsale: 'Tickets aren’t on sale right now', postponed: 'This gig has been postponed', rescheduled: 'This gig has been rescheduled' })[e.status]}</p>` : ''}
     <div class="dlg-foot">
       <button class="btn${g ? '' : ' primary'}" data-going="${esc(e.id)}">${g ? 'Not going any more' : 'I\u2019m going'}</button>
       <button class="btn" data-ics="${esc(e.id)}">Add to calendar</button>
-      ${e.url ? `<a class="btn" href="${esc(e.url)}" target="_blank" rel="noopener">Find tickets</a>` : ''}
+      ${(e.links && e.links.length ? e.links : e.url ? [{ src: 'Ticketmaster', url: e.url }] : []).map(l => `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener">Tickets on ${esc(l.src)}</a>`).join('')}
       <a class="btn" href="${esc(maps)}" target="_blank" rel="noopener">Get directions</a>
       <button class="btn" data-close>Close</button>
     </div>`;
@@ -1043,7 +1113,7 @@ function download(name, text){
 
 /* ---------- Settings ---------- */
 function openSettings(){
-  $('#clientId').value = settings.clientId; $('#tmKey').value = settings.tmKey;
+  $('#clientId').value = settings.clientId; $('#tmKey').value = settings.tmKey; $('#skKey').value = settings.skKey || '';
   $('#country').value = settings.country; $('#radius').value = settings.radius;
   $('#place').value = settings.place || ''; $('#maxArtists').value = settings.maxArtists;
   $('#srcFollowed').checked = settings.followed; $('#srcTop').checked = settings.top; $('#srcSaved').checked = settings.saved;
@@ -1080,7 +1150,7 @@ function useGeo(){
 function saveSettings(){
   const countryChanged = $('#country').value !== settings.country;
   settings = Object.assign(settings, {
-    clientId: $('#clientId').value.trim() || PRESET.clientId, tmKey: $('#tmKey').value.trim() || PRESET.tmKey, country: $('#country').value,
+    clientId: $('#clientId').value.trim() || PRESET.clientId, tmKey: $('#tmKey').value.trim() || PRESET.tmKey, skKey: $('#skKey').value.trim() || PRESET.skKey || '', country: $('#country').value,
     radius: Math.max(1, +$('#radius').value || 50), maxArtists: Math.max(10, +$('#maxArtists').value || 150),
     followed: $('#srcFollowed').checked, top: $('#srcTop').checked, saved: $('#srcSaved').checked,
     lat: draftLoc.lat ?? null, lng: draftLoc.lng ?? null, place: draftLoc.place || ''

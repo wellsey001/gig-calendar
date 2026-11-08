@@ -4,7 +4,7 @@
 
 See when the artists you listen to on Spotify are playing near you, or anywhere in the country, in one clean calendar.
 
-**Open the app:** https://wellsey001.github.io/gig-calendar/
+**Open the app:** https://YOUR-GITHUB-NAME.github.io/gig-calendar/
 
 <p align="center">
   <img src="screenshots/month.png" alt="Month view with gigs shown as ticket stubs on each day" width="800">
@@ -13,7 +13,7 @@ See when the artists you listen to on Spotify are playing near you, or anywhere 
 ## What it does
 
 - **Reads your Spotify library.** It looks at the artists you follow, your most-played artists and the artists on your liked songs, then ranks them by how much you listen to them.
-- **Finds their gigs.** It checks Ticketmaster for upcoming shows by those artists in your chosen country.
+- **Finds their gigs.** It checks Ticketmaster for upcoming shows by those artists in your chosen country. In the UK it can also check Skiddle, which is strong on smaller venues and festivals. Gigs listed on both are merged into one.
 - **Shows what’s near you.** Gigs within your chosen distance of home are “in earshot” and highlighted in yellow. Gigs further afield are shown in purple.
 - **Keeps track of the gigs you’re going to.** Mark a gig as “I’m going” and it appears in **My gigs** with a countdown and a reminder to book a hotel.
 - **Fits into your own calendar.** Export gigs to Google Calendar, Apple Calendar or Outlook as an `.ics` file.
@@ -70,7 +70,7 @@ All upcoming gigs in date order, grouped by month, each with a photo, the venue 
 Tap any gig to see the date, time, venue, distance and ticket status. From there you can:
 
 - choose **I’m going** to add it to My gigs
-- choose **Find tickets** to open the gig on Ticketmaster
+- choose **Tickets on Ticketmaster** or **Tickets on Skiddle** to open the gig on that site. A gig listed on both gets both buttons.
 - choose **Get directions** to open the venue in Google Maps
 - choose **Add to calendar** to download that one gig as a calendar file
 
@@ -121,13 +121,14 @@ Your picked gigs and settings stay on the device, so update the postcode in Sett
 
 - **Spotify Client ID:** create an app in the [Spotify developer dashboard](https://developer.spotify.com/dashboard) and tick **Web API**. Spotify requires the app owner to have Premium.
 - **Ticketmaster key:** sign up at [developer.ticketmaster.com](https://developer.ticketmaster.com/) and copy your **Consumer Key**. It’s free and allows 5,000 checks a day.
+- **Skiddle key (optional, UK only):** apply at [skiddle.com/api/join.php](https://www.skiddle.com/api/join.php). It’s free. Leave it out to search Ticketmaster only.
 
 ### 2. Build the keys in (optional)
 
 Open `index.html`, search for `PRESET` and fill in both keys:
 
 ```js
-const PRESET = { clientId: 'your-spotify-client-id', tmKey: 'your-ticketmaster-key' };
+const PRESET = { skKey: 'your-skiddle-key', clientId: 'your-spotify-client-id', tmKey: 'your-ticketmaster-key' };
 ```
 
 With the keys built in, people using your copy only have to add a postcode and sign in. Leave them blank if you want each person to enter their own in Settings.
@@ -170,7 +171,7 @@ The Spotify Client ID and Ticketmaster key in `index.html` are visible to anyone
 
 ## Limitations
 
-- Gigs come from Ticketmaster only, so shows sold only through other sites, such as Dice or See Tickets, won’t appear.
+- Gigs come from Ticketmaster, plus Skiddle in the UK, so shows sold only through other sites, such as Dice or See Tickets, won’t appear.
 - Spotify’s Development Mode limits the app to five users and requires the owner to have Premium.
 - Artists are matched by name, so an artist who shares a name with another act can occasionally pick up the wrong gigs.
 
@@ -182,6 +183,7 @@ The Spotify Client ID and Ticketmaster key in `index.html` are visible to anyone
 | Spotify says **Invalid redirect URI** | Add the app’s exact address, including the slash at the end, to Redirect URIs in the Spotify dashboard. |
 | Spotify refuses a friend’s sign-in | Add their Spotify email under **User Management**. |
 | “Ticketmaster rejected the API key” | Check the key in Settings, or in `PRESET` in `index.html`. |
+| “Couldn’t reach Skiddle” or “Skiddle rejected its API key” | Check the Skiddle key in Settings. Ticketmaster gigs still appear either way. |
 | Gigs show letter tiles instead of photos | Choose **Scan again**. Gigs saved before photos were added don’t have them. |
 | Changes don’t show after updating GitHub | Wait for the green tick in the **Actions** tab, then press Ctrl+Shift+R. |
 | The Android app shows a browser bar at the top | The `assetlinks.json` file isn’t being found. See the PWABuilder instructions for the `YOUR-GITHUB-NAME.github.io` repository. |
