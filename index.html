@@ -74,7 +74,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{ou
 .monthname{font-family:var(--display);font-size:1.25rem;font-weight:600;letter-spacing:-.03em;min-width:11ch;text-align:center}
 .iconbtn{font:inherit;font-size:1.3rem;line-height:1;width:2.2rem;height:2.2rem;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
 .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:12px;padding:2px;background:var(--bg)}
-.seg button{border:0;background:none;padding:.35rem .85rem;border-radius:9px;font:inherit;font-size:.92rem;color:var(--muted);cursor:pointer}
+.seg button{white-space:nowrap;border:0;background:none;padding:.35rem .85rem;border-radius:9px;font:inherit;font-size:.92rem;color:var(--muted);cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--line)}
 .search{flex:1 1 180px;max-width:260px}
 .legend{display:flex;gap:14px;font-size:.85rem;color:var(--muted);margin-left:auto}
@@ -173,6 +173,13 @@ dialog:has(.hero) .grab{background:rgb(255 255 255 / .9);box-shadow:0 0 0 1px rg
 .near .ph{color:var(--on-near);background:var(--near)}
 
 .tabbar{display:none}
+.new{display:inline-block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;line-height:1;padding:.32em .5em .28em;border-radius:6px;background:var(--ink);color:var(--surface);margin-right:.45em;vertical-align:.12em}
+.stub .new{font-size:.58rem;padding:.25em .4em .2em;margin-right:.35em}
+.mday.fresh .n{box-shadow:0 0 0 2px var(--ink)}
+.mlegend .lnew::before{background:none;box-shadow:0 0 0 2px var(--ink);width:9px;height:9px}
+.donate{display:flex;align-items:center;justify-content:space-between;gap:14px 24px;flex-wrap:wrap;margin:40px 0 0;padding:18px 20px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+.donate p{margin:0;max-width:62ch}
+.donate-btn{background:var(--near);border-color:var(--near);color:var(--on-near);flex:none}
 /* Setup wizard */
 body.wizard .actions,body.wizard .tabbar{display:none !important}
 .wiz{max-width:540px;margin:22px auto 0;background:var(--surface);border-radius:22px;padding:28px 28px 24px}
@@ -238,6 +245,8 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
   .search{max-width:none;flex:1 1 0;min-width:0}
   .legend{display:none}
   .wide{display:none}
+  .donate{margin-top:28px;padding:18px 4px 8px;justify-content:center;text-align:center}
+  .donate-btn{padding:.45rem 1.1rem}
   body.wizard{padding-bottom:env(safe-area-inset-bottom,0px)}
   .wiz{margin-top:14px;padding:22px 18px 18px;border-radius:18px}
   .wiz h2{font-size:1.25rem}
@@ -308,8 +317,9 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
       <button data-mode="going">My gigs</button>
     </div>
     <div class="seg" id="filterSeg" role="group" aria-label="Which gigs">
-      <button data-filter="all">Whole country</button>
+      <button data-filter="all">All gigs</button>
       <button data-filter="near">In earshot</button>
+      <button data-filter="new" id="filterNew" hidden>New</button>
     </div>
     <input class="search" id="search" type="search" placeholder="Search gigs" aria-label="Filter by artist or venue">
     <button class="btn small" id="icsBtn">Export<span class="wide"> to calendar</span></button>
@@ -317,6 +327,10 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
   </div>
 
   <main id="main"></main>
+  <footer class="donate" id="donate" hidden>
+    <p>Earshot is free, with no ads. If it’s helped you catch a gig, a small donation helps keep it going, even if it’s just enough for an Aldi ham sandwich.</p>
+    <a class="btn donate-btn" id="donateLink" href="#" target="_blank" rel="noopener">Donate with PayPal</a>
+  </footer>
 </div>
 
 <dialog id="settingsDlg" aria-labelledby="setTitle"><div class="grab" aria-hidden="true"></div>
@@ -402,6 +416,8 @@ const COUNTRIES = [['GB','United Kingdom'],['IE','Ireland'],['US','United States
   ['DK','Denmark'],['FI','Finland'],['PL','Poland'],['AT','Austria'],['CH','Switzerland'],['MX','Mexico']];
 // To share this page: fill in your Spotify Client ID and Ticketmaster key here,
 // so friends only have to sign in to Spotify and set their location.
+// Your PayPal.me link for the Donate button, for example 'https://paypal.me/yourname'. Leave blank to hide the button.
+const DONATE_URL = 'https://paypal.me/YOUR-PAYPAL-NAME';
 const PRESET = { clientId: 'fdb820d5316249259c6c8e8a2c7564e0', tmKey: 'UI5zEIYSdUARAIU1j7tupInAGgyU7PVR' };
 const DEFAULTS = {clientId:PRESET.clientId, tmKey:PRESET.tmKey, country:'GB', lat:null, lng:null, place:'', radius:50, followed:true, top:true, saved:true, maxArtists:150};
 let settings = Object.assign({}, DEFAULTS, store.get('gigcal.settings', {}));
@@ -580,11 +596,23 @@ async function scan(){
     if (!artists.length){ setStatus('Spotify didn’t return any artists. Check which sources are ticked in Settings.', true); return; }
     const list = artists.slice(0, settings.maxArtists);
     const events = await findGigs(list);
+    const prev = cache && cache.country === settings.country ? cache.events || [] : null;
+    const byId = new Map(), bySlot = new Map();
+    (prev || []).forEach(p => { byId.set(p.id, p); bySlot.set(slotOf(p), p); });
+    const t = Date.now();
+    events.forEach(e => {
+      const old = byId.get(e.id) || bySlot.get(slotOf(e));
+      e.firstSeen = old ? (old.firstSeen || 0) : (prev ? t : 0);
+      e.seenNew = old ? !!old.seenNew : false;
+    });
+    const added = events.filter(e => e.firstSeen === t && e.date >= keyOf(new Date())).length;
     cache = { events, artistCount: list.length, fetchedAt: Date.now(), country: settings.country, problems, who };
     store.set('gigcal.cache', cache);
     for (const id in going){ const fresh = events.find(e => e.id === id); if (fresh) going[id].ev = fresh; }
     saveGoing();
-    setStatus(problems.length ? `Done, but Spotify wouldn’t share your ${problems.join(' or ')}.` : '');
+    const newMsg = prev ? (added ? `Found ${added} new ${added === 1 ? 'gig' : 'gigs'} since your last scan.` : 'No new gigs since your last scan.') : '';
+    setStatus([newMsg, problems.length ? `Spotify wouldn’t share your ${problems.join(' or ')}.` : ''].filter(Boolean).join(' '));
+    if (added) view.filter = 'new';
     render();
   } catch(e){
     if (e.message === 'auth'){ store.del('gigcal.token'); setStatus('Your Spotify connection has expired. Connect again.', true); }
@@ -610,7 +638,7 @@ function withDistance(evs){
 function visibleEvents(){
   if (!cache) return [];
   const q = view.q.trim().toLowerCase();
-  return withDistance(cache.events).filter(e => (view.filter !== 'near' || e.near) &&
+  return withDistance(cache.events).filter(e => (view.filter === 'near' ? e.near : view.filter === 'new' ? isNew(e) : true) &&
     (!q || (e.artists.join(' ') + ' ' + e.venue + ' ' + e.city + ' ' + e.title).toLowerCase().includes(q)))
     .sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
 }
@@ -772,6 +800,16 @@ function scanningHTML(){
     : '<div class="empty"><h2>Ready when you are</h2><p>Choose <b>Find my gigs</b> to start looking.</p></div>';
 }
 
+const NEW_DAYS = 14;
+const isNew = e => !!e.firstSeen && !e.seenNew && Date.now() - e.firstSeen < NEW_DAYS * 864e5;
+const newBadge = e => isNew(e) ? '<span class="new">New</span>' : '';
+const slotOf = e => e.date + '|' + norm(e.venue) + '|' + norm((e.artists || [])[0]);
+function markSeen(id){
+  const ev = (cache?.events || []).find(x => x.id === id);
+  if (ev && isNew(ev)){ ev.seenNew = true; store.set('gigcal.cache', cache); if (going[id]){ going[id].ev.seenNew = true; saveGoing(); } return true; }
+  return false;
+}
+
 function render(){
   document.querySelectorAll('[data-tab]').forEach(b => b.dataset.tab === view.mode ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
   updateSummary();
@@ -782,6 +820,10 @@ function render(){
   $('#toolbar').hidden = !cache;
   if (!cache && view.mode !== 'going'){ main.innerHTML = store.get('gigcal.token', null) ? scanningHTML() : setupHTML(); return; }
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === view.mode));
+  const newCount = cache ? cache.events.filter(e => isNew(e) && e.date >= keyOf(new Date())).length : 0;
+  if (!newCount && view.filter === 'new') view.filter = 'all';
+  $('#filterNew').hidden = !newCount;
+  $('#filterNew').textContent = newCount ? `New (${newCount})` : 'New';
   document.querySelectorAll('[data-filter]').forEach(b => b.setAttribute('aria-pressed', b.dataset.filter === view.filter));
   $('#monthnav').hidden = view.mode !== 'month';
   $('#filterSeg').hidden = view.mode === 'going';
@@ -813,9 +855,9 @@ function phoneMonthHTML(evs){
     const near = list.filter(e => e.near).length, far = list.length - near;
     const dots = [...Array(Math.min(near, 3)).fill('dot near'), ...Array(Math.max(0, Math.min(far, 3 - Math.min(near, 3)))).fill('dot')];
     const label = new Date(y, mo, d).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) + (list.length ? `, ${list.length} ${list.length === 1 ? 'gig' : 'gigs'}` : '');
-    h += `<button class="mday${list.length ? ' has' : ''}${k === today ? ' today' : ''}" ${list.length ? `data-sel="${k}"` : 'disabled'} aria-pressed="${view.sel === k}" aria-label="${esc(label)}"><span class="n">${d}</span><span class="dots">${dots.map(c => `<i class="${c}"></i>`).join('')}</span></button>`;
+    h += `<button class="mday${list.length ? ' has' : ''}${k === today ? ' today' : ''}${list.some(isNew) ? ' fresh' : ''}" ${list.length ? `data-sel="${k}"` : 'disabled'} aria-pressed="${view.sel === k}" aria-label="${esc(label)}"><span class="n">${d}</span><span class="dots">${dots.map(c => `<i class="${c}"></i>`).join('')}</span></button>`;
   }
-  h += '</div><div class="mlegend"><span class="lnear">In earshot</span><span>Further afield</span></div></div>';
+  h += '</div><div class="mlegend"><span class="lnear">In earshot</span><span>Further afield</span>' + (inMonth.some(isNew) ? '<span class="lnew">New</span>' : '') + '</div></div>';
   if (view.sel){
     h += `<div class="agenda-head"><h2>${esc(parseDay(view.sel).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}</h2><button class="linkish" data-sel-clear>Whole month</button></div>`;
     h += '<div class="daylist">' + (byDay[view.sel] || []).map(e => rowHTML(e, false)).join('') + '</div>';
@@ -842,7 +884,7 @@ function monthHTML(evs){
     const d = new Date(y, mo, 1 - offset + i), k = keyOf(d);
     const list = (byDay[k] || []).sort((a,b) => b.near - a.near);
     h += `<div class="cell${d.getMonth() !== mo ? ' out' : ''}${k === today ? ' today' : ''}"><span class="num">${d.getDate()}</span>`;
-    list.slice(0, 3).forEach(e => { h += `<button class="stub${e.near ? ' near' : ''}${going[e.id] ? ' going' : ''}" data-id="${esc(e.id)}" title="${esc(e.artists.join(', ') + ' at ' + e.venue)}">${esc(e.artists.join(', '))}<small>${esc(e.city)}</small></button>`; });
+    list.slice(0, 3).forEach(e => { h += `<button class="stub${e.near ? ' near' : ''}${going[e.id] ? ' going' : ''}" data-id="${esc(e.id)}" title="${esc(e.artists.join(', ') + ' at ' + e.venue)}">${newBadge(e)}${esc(e.artists.join(', '))}<small>${esc(e.city)}</small></button>`; });
     if (list.length > 3) h += `<button class="more" data-day="${k}">+${list.length - 3} more</button>`;
     h += '</div>';
   }
@@ -860,14 +902,14 @@ function rowHTML(e, withDate){
   return `<button class="row${e.near ? ' near' : ''}${going[e.id] ? ' going' : ''}" data-id="${esc(e.id)}">
     ${withDate ? `<span class="dateblock"><b>${d.getDate()}</b><span>${esc(d.toLocaleDateString(undefined, { weekday: 'short' }))}</span></span>` : ''}
     ${picHTML(thumbOf(e), e.artists[0], 'thumb')}
-    <span class="txt"><span class="who">${esc(e.artists.join(', '))}</span><span class="where">${esc([e.venue, e.city].filter(Boolean).join(', '))}${e.time ? ', ' + fmtTime(e.time) : ''}</span>${e.dist != null ? `<span class="dist-inline">${esc(distText(e))} away</span>` : ''}</span>
+    <span class="txt"><span class="who">${newBadge(e)}${esc(e.artists.join(', '))}</span><span class="where">${esc([e.venue, e.city].filter(Boolean).join(', '))}${e.time ? ', ' + fmtTime(e.time) : ''}</span>${e.dist != null ? `<span class="dist-inline">${esc(distText(e))} away</span>` : ''}</span>
     <span class="dist">${esc(distText(e))}</span></button>`;
 }
 
 function listHTML(evs){
   const today = keyOf(new Date());
   const up = evs.filter(e => e.date >= today);
-  if (!up.length) return `<div class="empty"><h2>No upcoming gigs found</h2><p>${view.filter === 'near' ? 'Nothing within ' + settings.radius + ' miles right now. Try a bigger radius in Settings, or switch to the whole country.' : 'None of the artists checked have shows listed in this country. Try checking more artists in Settings, then scan again.'}</p></div>`;
+  if (!up.length) return `<div class="empty"><h2>No upcoming gigs found</h2><p>${view.filter === 'new' ? 'You’ve seen all the new gigs. Switch to All gigs to see everything.' : view.filter === 'near' ? 'Nothing within ' + settings.radius + ' miles right now. Try a bigger radius in Settings, or switch to the whole country.' : 'None of the artists checked have shows listed in this country. Try checking more artists in Settings, then scan again.'}</p></div>`;
   let h = '<div class="list">', cur = '';
   up.forEach(e => {
     const m = fmtMonth(parseDay(e.date));
@@ -901,7 +943,7 @@ function gigCard(e){
   return `<div class="gig${e.near ? ' near' : ''}">
     <div class="gig-pic">${picHTML(heroOf(e), e.artists[0], 'gigimg')}<div class="count"><b>${c.big}</b><span>${c.small}</span></div></div>
     <div class="gig-body">
-    <button class="who" data-id="${esc(e.id)}">${esc(e.artists.join(', '))}</button>
+    <button class="who" data-id="${esc(e.id)}">${newBadge(e)}${esc(e.artists.join(', '))}</button>
     <div class="where">${esc(fmtLong(e.date))}${e.time ? ', ' + fmtTime(e.time) : ''}<br>${esc([e.venue, e.city].filter(Boolean).join(', '))}${e.dist != null ? ', ' + esc(distText(e)) + ' away' : ''}</div>
     ${n < 0 ? '' : `<div class="hotel"><span>Hotel</span><div class="seg" role="group" aria-label="Hotel for ${esc(e.artists[0])}">${opt('todo')}${opt('booked')}${opt('none')}</div></div>`}
   </div></div>`;
@@ -929,7 +971,7 @@ function updateSummary(){
   const when = ago < 1 ? 'within the last hour' : ago < 48 ? ago + ' hours ago' : Math.round(ago / 24) + ' days ago';
   const country = (COUNTRIES.find(c => c[0] === cache.country) || [0, cache.country])[1];
   el.textContent = `${all.length} upcoming ${all.length === 1 ? 'gig' : 'gigs'} in ${country} from ${cache.artistCount} of your artists` +
-    (settings.lat != null ? `, ${near} in earshot` : '') + `. Checked ${when}` + (cache.who ? `, from ${cache.who}’s Spotify.` : '.');
+    (settings.lat != null ? `, ${near} in earshot` : '') + (all.filter(isNew).length ? `, ${all.filter(isNew).length} new` : '') + `. Checked ${when}` + (cache.who ? `, from ${cache.who}’s Spotify.` : '.');
 }
 
 function updateButtons(){
@@ -943,6 +985,7 @@ function updateButtons(){
 /* ---------- Event details ---------- */
 function openEvent(id){
   const raw = findEvent(id);
+  const wasNew = raw && isNew(raw);
   if (!raw) return;
   const e = withDistance([raw])[0], g = going[e.id], n = daysUntil(e.date);
   const maps = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(e.lat != null && !isNaN(e.lat) ? e.lat + ',' + e.lng : [e.venue, e.city].filter(Boolean).join(', '));
@@ -961,6 +1004,7 @@ function openEvent(id){
     </div>`;
   $('#eventDlg').scrollTop = 0;
   if (!$('#eventDlg').open) $('#eventDlg').showModal();
+  if (wasNew && markSeen(id)) render();
 }
 function openDay(k){
   const list = visibleEvents().filter(e => e.date === k);
@@ -1123,6 +1167,8 @@ document.addEventListener('click', e => {
   if (t.dataset.id){ openEvent(t.dataset.id); }
 });
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) closeDlg(d); }));
+
+if (/^https:\/\/(www\.)?paypal\.(me|com)\/.+/i.test(DONATE_URL) && !/YOUR-PAYPAL-NAME/i.test(DONATE_URL)){ $('#donateLink').href = DONATE_URL; $('#donate').hidden = false; }
 
 if ('serviceWorker' in navigator && !BAD_ORIGIN) navigator.serviceWorker.register('sw.js').catch(() => {});
 

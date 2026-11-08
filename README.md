@@ -4,7 +4,7 @@
 
 See when the artists you listen to on Spotify are playing near you, or anywhere in the country, in one clean calendar.
 
-**Open the app:** https://wellsey001.github.io/gig-calendar/
+**Open the app:** https://YOUR-GITHUB-NAME.github.io/gig-calendar/
 
 <p align="center">
   <img src="screenshots/month.png" alt="Month view with gigs shown as ticket stubs on each day" width="800">
@@ -47,6 +47,10 @@ To scan again later, for example to pick up newly announced gigs, choose **Scan 
 
 ## Using the app
 
+### New gigs
+
+Each scan is compared with the one before. Gigs that weren’t there last time get a **New** label in the list and calendar, and their day gets a ring on the phone calendar. If a scan finds new gigs, the app switches to the **New** filter so you see them first. The label goes once you’ve opened the gig, or after two weeks.
+
 ### Month view
 
 Each gig is a ticket stub on its date. Yellow gigs are in earshot and purple ones are further afield. Use the arrows to move between months. If a month is empty, a link takes you to the next month that has a gig.
@@ -57,7 +61,8 @@ All upcoming gigs in date order, grouped by month, each with a photo, the venue 
 
 ### Filters
 
-- **Whole country** or **In earshot** switches between all gigs and only the ones within your distance.
+- **All gigs** or **In earshot** switches between every gig in the country and only the ones within your distance.
+- **New** appears after a scan finds gigs that weren’t there last time, and shows only those.
 - The filter box narrows the list by artist, venue or city.
 
 ### Gig details
