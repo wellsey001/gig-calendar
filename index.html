@@ -289,7 +289,7 @@ async function connectSpotify(){
   store.set('gigcal.verifier', verifier); store.set('gigcal.state', state);
   const p = new URLSearchParams({ client_id: settings.clientId, response_type: 'code', redirect_uri: REDIRECT,
     code_challenge_method: 'S256', code_challenge: await challengeFor(verifier),
-    scope: 'user-follow-read user-top-read user-library-read', state });
+    scope: 'user-follow-read user-top-read user-library-read', state, show_dialog: 'true' });
   location.href = 'https://accounts.spotify.com/authorize?' + p;
 }
 function saveToken(d){
@@ -412,11 +412,13 @@ async function scan(){
   if (!settings.tmKey){ openSettings(); setStatus('Add a Ticketmaster API key first.', true); return; }
   busy = true; updateButtons();
   try {
+    let who = '';
+    try { setStatus('Checking which Spotify account is connected…'); who = (await sp('/me')).display_name || ''; } catch(e){ if (e.message === 'auth') throw e; }
     const { artists, problems } = await collectArtists();
     if (!artists.length){ setStatus('Spotify didn’t return any artists. Check which sources are ticked in Settings.', true); return; }
     const list = artists.slice(0, settings.maxArtists);
     const events = await findGigs(list);
-    cache = { events, artistCount: list.length, fetchedAt: Date.now(), country: settings.country, problems };
+    cache = { events, artistCount: list.length, fetchedAt: Date.now(), country: settings.country, problems, who };
     store.set('gigcal.cache', cache);
     for (const id in going){ const fresh = events.find(e => e.id === id); if (fresh) going[id].ev = fresh; }
     saveGoing();
@@ -571,7 +573,7 @@ function updateSummary(){
   const when = ago < 1 ? 'within the last hour' : ago < 48 ? ago + ' hours ago' : Math.round(ago / 24) + ' days ago';
   const country = (COUNTRIES.find(c => c[0] === cache.country) || [0, cache.country])[1];
   el.textContent = `${all.length} upcoming ${all.length === 1 ? 'gig' : 'gigs'} in ${country} from ${cache.artistCount} of your artists` +
-    (settings.lat != null ? `, ${near} within ${settings.radius} miles` : '') + `. Checked ${when}.`;
+    (settings.lat != null ? `, ${near} within ${settings.radius} miles` : '') + `. Checked ${when}` + (cache.who ? `, from ${cache.who}’s Spotify.` : '.');
 }
 
 function updateButtons(){
@@ -696,7 +698,7 @@ $('#saveSet').onclick = saveSettings;
 $('#findPlace').onclick = lookupPlace;
 $('#place').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); lookupPlace(); } });
 $('#geoBtn').onclick = useGeo;
-$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); updateButtons(); setStatus('Spotify disconnected. Your saved gigs stay until you scan again.'); };
+$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
 $('#mainBtn').onclick = () => store.get('gigcal.token', null) ? scan() : connectSpotify();
 $('#prevBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() - 1, 1); render(); };
 $('#nextBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() + 1, 1); render(); };
