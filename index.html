@@ -173,6 +173,12 @@ dialog:has(.hero) .grab{background:rgb(255 255 255 / .9);box-shadow:0 0 0 1px rg
 .near .ph{color:var(--on-near);background:var(--near)}
 
 .tabbar{display:none}
+.elsewhere{margin:18px 0 0;padding-top:14px;border-top:1px solid var(--line)}
+.elsewhere h3{font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-size:.88rem;font-weight:700;text-decoration:none;color:var(--ink);border:1.5px solid var(--line);border-radius:999px;padding:.35rem .8rem;background:var(--bg)}
+.chip:hover{border-color:var(--far)}
+.chip::after{content:" \2197";font-weight:400;color:var(--muted)}
 .new{display:inline-block;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;line-height:1;padding:.32em .5em .28em;border-radius:6px;background:var(--ink);color:var(--surface);margin-right:.45em;vertical-align:.12em}
 .stub .new{font-size:.58rem;padding:.25em .4em .2em;margin-right:.35em}
 .mday.fresh .n{box-shadow:0 0 0 2px var(--ink)}
@@ -1052,6 +1058,20 @@ function updateButtons(){
 }
 
 /* ---------- Event details ---------- */
+// Sites without a public API: open a search for the artist instead
+function elsewhereLinks(e){
+  const a = e.artists[0] || '';
+  const q = encodeURIComponent(a);
+  const site = d => 'https://www.google.com/search?q=' + encodeURIComponent(`"${a}" tickets site:${d}`);
+  const have = new Set((e.links || []).map(l => l.src));
+  return [
+    ['Dice', 'https://dice.fm/search?query=' + q],
+    ['See Tickets', site('seetickets.com')],
+    ['Gigantic', site('gigantic.com')],
+    ['Skiddle', have.has('Skiddle') ? '' : site('skiddle.com')],
+    ['Songkick', site('songkick.com')],
+  ].filter(([, u]) => u);
+}
 function openEvent(id){
   const raw = findEvent(id);
   const wasNew = raw && isNew(raw);
@@ -1065,6 +1085,7 @@ function openEvent(id){
     ${e.price ? `<p>Tickets from ${esc(e.price)}${e.priceSrc ? ' on ' + esc(e.priceSrc) : ''}</p>` : ''}
     <p><strong>${esc(e.venue)}</strong><br>${esc(e.city)}${e.dist != null ? `<br><span style="color:var(--muted)">${esc(distText(e))} from you</span>` : ''}</p>
     ${({ offsale: 'Tickets aren’t on sale right now', postponed: 'This gig has been postponed', rescheduled: 'This gig has been rescheduled' })[e.status] ? `<p class="alert">${({ offsale: 'Tickets aren’t on sale right now', postponed: 'This gig has been postponed', rescheduled: 'This gig has been rescheduled' })[e.status]}</p>` : ''}
+    <div class="elsewhere"><h3>Search elsewhere for ${esc(e.artists[0] || '')}</h3><div class="chips">${elsewhereLinks(e).map(([n, u]) => `<a class="chip" href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a>`).join('')}</div></div>
     <div class="dlg-foot">
       <button class="btn${g ? '' : ' primary'}" data-going="${esc(e.id)}">${g ? 'Not going any more' : 'I\u2019m going'}</button>
       <button class="btn" data-ics="${esc(e.id)}">Add to calendar</button>

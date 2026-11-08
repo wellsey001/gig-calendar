@@ -72,6 +72,7 @@ Tap any gig to see the date, time, venue, distance and ticket status. From there
 - choose **I’m going** to add it to My gigs
 - choose **Tickets on Ticketmaster** or **Tickets on Skiddle** to open the gig on that site. A gig listed on both gets both buttons.
 - choose **Get directions** to open the venue in Google Maps
+- use **Search elsewhere** to look the artist up on Dice, See Tickets, Gigantic, Songkick or Skiddle, for gigs Earshot can’t see directly
 - choose **Add to calendar** to download that one gig as a calendar file
 
 ### My gigs
