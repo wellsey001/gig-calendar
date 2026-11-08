@@ -1,5 +1,6 @@
-[README.md](https://github.com/user-attachments/files/34543983/README.md)
-# Gig calendar
+<p align="center"><img src="logo.png" alt="" width="120"></p>
+
+# Earshot
 
 See when the artists you listen to on Spotify are playing near you, or anywhere in the country, in one clean calendar.
 
@@ -13,7 +14,7 @@ See when the artists you listen to on Spotify are playing near you, or anywhere 
 
 - **Reads your Spotify library.** It looks at the artists you follow, your most-played artists and the artists on your liked songs, then ranks them by how much you listen to them.
 - **Finds their gigs.** It checks Ticketmaster for upcoming shows by those artists in your chosen country.
-- **Shows what’s near you.** Gigs within your chosen distance of home are highlighted in pink. Gigs elsewhere in the country are shown in teal.
+- **Shows what’s near you.** Gigs within your chosen distance of home are “in earshot” and highlighted in yellow. Gigs further afield are shown in purple.
 - **Keeps track of the gigs you’re going to.** Mark a gig as “I’m going” and it appears in **My gigs** with a countdown and a reminder to book a hotel.
 - **Fits into your own calendar.** Export gigs to Google Calendar, Apple Calendar or Outlook as an `.ics` file.
 - **Works on Android.** Install it as an app with its own icon, a bottom tab bar and swipe-up gig details.
@@ -24,19 +25,23 @@ See when the artists you listen to on Spotify are playing near you, or anywhere 
 |:---:|:---:|:---:|
 | <img src="screenshots/month.png" alt="Month view" width="260"> | <img src="screenshots/list.png" alt="List of upcoming gigs with photos and distances" width="260"> | <img src="screenshots/my-gigs.png" alt="My gigs with countdowns and hotel status" width="260"> |
 
-| Gig details | On Android |
-|:---:|:---:|
-| <img src="screenshots/details.png" alt="Gig details panel with photo, directions and ticket buttons" width="260"> | <img src="screenshots/android.png" alt="The app on an Android phone with the bottom tab bar" width="260"> |
+| Gig details | Calendar on a phone | Setting up |
+|:---:|:---:|:---:|
+| <img src="screenshots/details.png" alt="Gig details panel with photo, directions and ticket buttons" width="260"> | <img src="screenshots/android.png" alt="Phone calendar with dots on gig days and the month's gigs listed underneath" width="260"> | <img src="screenshots/setup.png" alt="The last step of the setup wizard, ready to connect Spotify" width="260"> |
+
+<sub>Screenshots use made-up artists and gigs.</sub>
 
 ## Getting started
 
 You need a Spotify account, and the person who runs this copy of the app has to add you as a user first (see [Sharing with friends](#sharing-with-friends)).
 
-1. Open the app link above.
-2. Choose **Settings**, enter your postcode and choose **Set**. Outside the UK, use **Use my current location** instead, or type coordinates such as `48.85, 2.35`.
-3. Choose your country and how far counts as “near me”. The default is 50 miles.
-4. Choose **Save settings**, then **Connect Spotify** and sign in.
+1. Open the app link above. A short setup wizard starts.
+2. Choose your country and enter your postcode. Outside the UK, choose **Use my current location**, or type coordinates such as `48.85, 2.35`. Use the slider to set how far counts as “in earshot”. The default is 50 miles.
+3. Tick which artists Earshot should look for: artists you follow, your most-played artists, artists from your liked songs, or any mix.
+4. Check the summary and choose **Connect Spotify**, then sign in.
 5. The scan starts as soon as you’re back. It takes about a minute for 150 artists.
+
+You can change any of these later in **Settings**.
 
 To scan again later, for example to pick up newly announced gigs, choose **Scan again**.
 
@@ -44,7 +49,7 @@ To scan again later, for example to pick up newly announced gigs, choose **Scan 
 
 ### Month view
 
-Each gig is a ticket stub on its date. Pink stubs are near you and teal stubs are elsewhere. Use the arrows to move between months. If a month is empty, a link takes you to the next month that has a gig.
+Each gig is a ticket stub on its date. Yellow gigs are in earshot and purple ones are further afield. Use the arrows to move between months. If a month is empty, a link takes you to the next month that has a gig.
 
 ### List view
 
@@ -52,7 +57,7 @@ All upcoming gigs in date order, grouped by month, each with a photo, the venue 
 
 ### Filters
 
-- **Whole country** or **Near me** switches between all gigs and only the ones within your distance.
+- **Whole country** or **In earshot** switches between all gigs and only the ones within your distance.
 - The filter box narrows the list by artist, venue or city.
 
 ### Gig details
@@ -76,13 +81,13 @@ Your picks are kept when you scan again.
 
 ### Exporting to your calendar
 
-Choose **Export to calendar** to download `gigs.ics` with every upcoming gig in the current view. On the My gigs tab, it exports only the gigs you’re going to. Open the file on your phone or computer to add the gigs to your calendar.
+Choose **Export to calendar** to download `earshot-gigs.ics` with every upcoming gig in the current view. On the My gigs tab, it exports only the gigs you’re going to. Open the file on your phone or computer to add the gigs to your calendar.
 
 ## Installing on Android
 
 **Option 1: from Chrome.** Open the app link in Chrome, open the menu (⋮) and choose **Install app**.
 
-**Option 2: from an APK.** If you’ve been sent `gig-calendar.apk`:
+**Option 2: from an APK.** If you’ve been sent the Earshot APK:
 
 1. Tap the file. Android asks to allow installs from that app (Files, WhatsApp and so on).
 2. Choose **Settings**, turn on **Allow from this source**, then go back.
@@ -150,6 +155,7 @@ On Windows, use `py` instead of `python3`. Then open `http://127.0.0.1:8000/` an
 | `manifest.json` | App name, colours and icons for installing on Android |
 | `sw.js` | Lets the app open without a signal. It always checks for a newer version first. |
 | `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` | App icons |
+| `logo.svg`, `logo.png` | The Earshot logo |
 
 ## Privacy
 
