@@ -173,6 +173,33 @@ dialog:has(.hero) .grab{background:rgb(255 255 255 / .9);box-shadow:0 0 0 1px rg
 .near .ph{color:var(--on-near);background:var(--near)}
 
 .tabbar{display:none}
+/* Setup wizard */
+body.wizard .actions,body.wizard .tabbar{display:none !important}
+.wiz{max-width:540px;margin:22px auto 0;background:var(--surface);border-radius:22px;padding:28px 28px 24px}
+.wdots{display:flex;gap:6px;margin-bottom:22px}
+.wdots i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.wdots i.on{background:var(--near)}
+.wstep{margin:0 0 6px;font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.wiz h2{font-family:var(--display);font-size:1.45rem;font-weight:600;letter-spacing:-.03em;line-height:1.15;margin:0 0 8px}
+.wiz .lead{color:var(--muted);margin:0 0 18px}
+.wiz label{display:block;font-weight:700;font-size:.92rem;margin:16px 0 6px}
+.wiz .hint{font-size:.84rem;color:var(--muted);margin:6px 0 4px;min-height:1.2em}
+.wiz input[type=range]{padding:0;border:0;background:none;accent-color:var(--far)}
+.wiz-mark{position:relative;width:96px;height:96px;margin:6px 0 22px;background:#231942;border-radius:26px;padding:16px}
+.wiz-mark svg{display:block;width:100%;height:100%}
+.wopts{display:grid;gap:8px}
+.wopt{display:flex !important;gap:12px;align-items:flex-start;margin:0 !important;padding:14px;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;font-weight:400 !important}
+.wopt:has(input:checked){border-color:var(--far);background:var(--far-soft)}
+.wopt input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--far);flex:none}
+.wopt b{display:block}
+.wopt small{display:block;color:var(--muted);font-size:.86rem;margin-top:2px}
+.wsum{list-style:none;padding:0;margin:0 0 6px;border:1.5px solid var(--line);border-radius:14px}
+.wsum li{display:grid;grid-template-columns:7.5em minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:12px 14px}
+.wsum li + li{border-top:1px solid var(--line)}
+.wsum span{color:var(--muted);font-size:.88rem}
+.wiz-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:26px}
+.wfoot-r{display:flex;align-items:center;gap:16px}
+.wiz .btn.primary{padding:.65rem 1.4rem}
 /* Phone calendar: a compact month with dots, and the gigs listed underneath */
 .mcal{background:var(--surface);border-radius:18px;padding:8px 6px 10px}
 .mgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));row-gap:2px}
@@ -211,6 +238,10 @@ dialog:has(.hero) .grab{background:rgb(255 255 255 / .9);box-shadow:0 0 0 1px rg
   .search{max-width:none;flex:1 1 0;min-width:0}
   .legend{display:none}
   .wide{display:none}
+  body.wizard{padding-bottom:env(safe-area-inset-bottom,0px)}
+  .wiz{margin-top:14px;padding:22px 18px 18px;border-radius:18px}
+  .wiz h2{font-size:1.25rem}
+  .wsum li{grid-template-columns:6.5em minmax(0,1fr) auto}
   .cell{min-height:72px;padding:3px}
   .stub{font-size:.68rem;padding:3px 6px}
   .stub small{display:none}
@@ -541,7 +572,7 @@ async function findGigs(artists){
 async function scan(){
   if (busy) return;
   if (!settings.tmKey){ openSettings(); setStatus('Add a Ticketmaster API key first.', true); return; }
-  busy = true; updateButtons();
+  busy = true; updateButtons(); render();
   try {
     let who = '';
     try { setStatus('Checking which Spotify account is connected…'); who = (await sp('/me')).display_name || ''; } catch(e){ if (e.message === 'auth') throw e; }
@@ -560,7 +591,7 @@ async function scan(){
     else if (e.message === 'tmkey') setStatus('Ticketmaster rejected the API key. Check it in Settings.', true);
     else if (e.message === 'spotify 403') setStatus('Spotify blocked the request. Make sure your account is on the app’s user list in the Spotify dashboard.', true);
     else setStatus(String(e.message || e), true);
-  } finally { busy = false; updateButtons(); }
+  } finally { busy = false; updateButtons(); render(); }
 }
 
 /* ---------- Distance ---------- */
@@ -605,12 +636,151 @@ document.addEventListener('error', ev => {
   const sp = document.createElement('span'); sp.className = t.className + ' ph'; sp.textContent = t.dataset.ph; t.replaceWith(sp);
 }, true);
 
+/* ---------- Setup wizard ---------- */
+let wizKeys = !settings.clientId || !settings.tmKey;
+let wizDraft = null;
+const needsWizard = () => !store.get('gigcal.token', null) && !cache && !new URLSearchParams(location.search).has('code');
+const wizSteps = () => ['welcome', 'place', 'sources', ...(wizKeys ? ['keys'] : []), 'connect'];
+async function geocode(v){
+  const coords = v.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (coords) return { lat: +coords[1], lng: +coords[2], place: v.trim(), label: 'those coordinates' };
+  const pc = encodeURIComponent(v.replace(/\s+/g, ''));
+  let r = await fetch('https://api.postcodes.io/postcodes/' + pc);
+  if (!r.ok) r = await fetch('https://api.postcodes.io/outcodes/' + pc);
+  if (!r.ok) throw new Error('notfound');
+  const d = (await r.json()).result;
+  const area = Array.isArray(d.admin_district) ? d.admin_district[0] : d.admin_district;
+  const p = v.trim().toUpperCase();
+  return { lat: d.latitude, lng: d.longitude, place: p, label: p + (area ? ' (' + area + ')' : '') };
+}
+function wizardHTML(){
+  const steps = wizSteps();
+  view.wiz = Math.max(0, Math.min(view.wiz || 0, steps.length - 1));
+  const step = steps[view.wiz];
+  if (!wizDraft) wizDraft = { lat: settings.lat, lng: settings.lng, place: settings.place };
+  const n = steps.length - 1;
+  const head = view.wiz ? `<div class="wdots" aria-hidden="true">${steps.slice(1).map((_, i) => `<i class="${i < view.wiz ? 'on' : ''}"></i>`).join('')}</div><p class="wstep">Step ${view.wiz} of ${n}</p>` : '';
+  const back = '<button class="btn" data-wiz="back">Back</button>';
+  const country = (COUNTRIES.find(c => c[0] === settings.country) || [0, settings.country])[1];
+  let body = '', foot = '';
+  if (step === 'welcome'){
+    body = `<div class="wiz-mark">${document.querySelector('.mark').outerHTML}</div>
+      <h2>Never miss your artists live</h2>
+      <p class="lead">Earshot looks at the artists in your Spotify and finds their upcoming gigs, near you and across the country. Setting up takes about a minute.</p>`;
+    foot = '<span></span><button class="btn primary" data-wiz="next">Get started</button>';
+  } else if (step === 'place'){
+    const typed = wizDraft.place && wizDraft.place !== 'your current location' ? wizDraft.place : '';
+    body = `<h2>Where are you based?</h2>
+      <p class="lead">Gigs close to home are marked as in earshot.</p>
+      <label for="wCountry">Country</label>
+      <select id="wCountry">${COUNTRIES.map(([c, nm]) => `<option value="${c}"${c === settings.country ? ' selected' : ''}>${esc(nm)}</option>`).join('')}</select>
+      <label for="wPlace">Your postcode</label>
+      <div class="inline"><input id="wPlace" value="${esc(typed)}" placeholder="For example NP20 1AB" autocomplete="postal-code" autocapitalize="characters"><button class="btn small" data-wiz="find">Set</button></div>
+      <p class="hint" id="wHint" role="status">${wizDraft.lat != null ? 'Set to ' + esc(wizDraft.place || 'your current location') + '.' : 'Outside the UK, use your current location or type coordinates like 48.85, 2.35.'}</p>
+      <button class="linkish" data-wiz="geo">Use my current location</button>
+      <label for="wRadius">“In earshot” means within <span id="wRadiusVal">${Math.min(settings.radius, 150)}</span> miles</label>
+      <input id="wRadius" type="range" min="5" max="150" step="5" value="${Math.min(settings.radius, 150)}">`;
+    foot = `${back}<span class="wfoot-r"><button class="linkish" data-wiz="skip">Skip</button><button class="btn primary" data-wiz="next">Next</button></span>`;
+  } else if (step === 'sources'){
+    const opt = (id, on, t, d) => `<label class="wopt"><input type="checkbox" id="${id}"${on ? ' checked' : ''}><span><b>${t}</b><small>${d}</small></span></label>`;
+    body = `<h2>Which artists should Earshot look for?</h2>
+      <p class="lead">The more you tick, the more gigs you’ll see.</p>
+      <div class="wopts">
+        ${opt('wFollowed', settings.followed, 'Artists I follow', 'Everyone you follow on Spotify')}
+        ${opt('wTop', settings.top, 'My most-played artists', 'Who you’ve listened to most, lately and over the years')}
+        ${opt('wSaved', settings.saved, 'Artists from my liked songs', 'Everyone who appears on songs you’ve liked')}
+      </div>
+      <p class="hint" id="wHint" role="status"></p>`;
+    foot = `${back}<button class="btn primary" data-wiz="next">Next</button>`;
+  } else if (step === 'keys'){
+    body = `<h2>Add your app keys</h2>
+      <p class="lead">This copy of Earshot doesn’t have its keys built in. You only need to do this once.</p>
+      <label for="wClient">Spotify Client ID</label>
+      <input id="wClient" value="${esc(settings.clientId)}" autocomplete="off" spellcheck="false">
+      <p class="hint">From the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify developer dashboard</a>. Add this redirect URI to the app there:</p>
+      <code class="uri">${BAD_ORIGIN ? 'Shown here once the page is opened from http://127.0.0.1 or a website.' : esc(REDIRECT)}</code>
+      <label for="wTm">Ticketmaster API key</label>
+      <input id="wTm" value="${esc(settings.tmKey)}" autocomplete="off" spellcheck="false">
+      <p class="hint">The free Consumer Key from <a href="https://developer.ticketmaster.com/" target="_blank" rel="noopener">developer.ticketmaster.com</a>.</p>
+      <p class="hint" id="wHint" role="status"></p>`;
+    foot = `${back}<button class="btn primary" data-wiz="next">Next</button>`;
+  } else {
+    const src = [settings.followed && 'artists you follow', settings.top && 'most-played', settings.saved && 'liked songs'].filter(Boolean).join(', ');
+    const where = settings.lat != null ? `${esc(settings.place || 'Your current location')}, ${esc(country)}` : `Not set, ${esc(country)}`;
+    body = `<h2>Connect your Spotify</h2>
+      <p class="lead">You’ll sign in on Spotify’s site, then come straight back here while Earshot finds your gigs.</p>
+      <ul class="wsum">
+        <li><span>Location</span><b>${where}</b><button class="linkish" data-wiz-go="place">Change</button></li>
+        <li><span>In earshot</span><b>Within ${settings.radius} miles</b><button class="linkish" data-wiz-go="place">Change</button></li>
+        <li><span>Artists</span><b>${esc(src.charAt(0).toUpperCase() + src.slice(1))}</b><button class="linkish" data-wiz-go="sources">Change</button></li>
+      </ul>
+      <p class="hint">If Spotify shows someone else’s account, choose “Not you?” on its page to switch.</p>`;
+    foot = `${back}<button class="btn primary" data-wiz="connect">Connect Spotify</button>`;
+  }
+  return `<section class="wiz${step === 'welcome' ? ' wiz-welcome' : ''}" aria-label="Set up Earshot">${head}${body}<div class="wiz-foot">${foot}</div></section>`;
+}
+async function wizAction(a){
+  const steps = wizSteps(), step = steps[view.wiz];
+  const hint = msg => { const h = $('#wHint'); if (h) h.textContent = msg; };
+  const go = i => { view.wiz = i; render(); window.scrollTo(0, 0); const f = $('.wiz h2'); if (f){ f.tabIndex = -1; f.focus({ preventScroll: true }); } };
+  if (a === 'back') return go(Math.max(0, view.wiz - 1));
+  if (a === 'connect') return connectSpotify();
+  if (a === 'geo'){
+    if (!navigator.geolocation){ hint('This browser can’t share your location. Type a postcode instead.'); return; }
+    hint('Asking for your location…');
+    navigator.geolocation.getCurrentPosition(
+      p => { wizDraft = { lat: p.coords.latitude, lng: p.coords.longitude, place: 'your current location' }; const i = $('#wPlace'); if (i) i.value = ''; hint('Using your current location.'); },
+      () => hint('Location access was blocked. Type a postcode instead.'), { timeout: 10000 });
+    return;
+  }
+  if (a === 'find'){
+    const v = $('#wPlace').value.trim();
+    if (!v){ hint('Type a postcode first.'); return; }
+    hint('Looking up ' + v + '…');
+    try { wizDraft = await geocode(v); hint('Found ' + wizDraft.label + '.'); }
+    catch(e){ hint('Couldn’t find that postcode. Check it, or use your current location.'); }
+    return;
+  }
+  if (step === 'place'){ settings.country = $('#wCountry').value; settings.radius = +$('#wRadius').value; }
+  if (a === 'skip'){ store.set('gigcal.settings', settings); return go(view.wiz + 1); }
+  if (a !== 'next') return;
+  if (step === 'place'){
+    const v = $('#wPlace').value.trim();
+    if (v && v.toUpperCase() !== String(wizDraft.place || '').toUpperCase()){
+      hint('Looking up ' + v + '…');
+      try { wizDraft = await geocode(v); } catch(e){ hint('Couldn’t find that postcode. Check it, use your current location, or choose Skip.'); return; }
+    }
+    if (wizDraft.lat == null){ hint('Set your location first, or choose Skip to do it later.'); return; }
+    Object.assign(settings, { lat: wizDraft.lat, lng: wizDraft.lng, place: wizDraft.place });
+  }
+  if (step === 'sources'){
+    const f = $('#wFollowed').checked, tp = $('#wTop').checked, sv = $('#wSaved').checked;
+    if (!f && !tp && !sv){ hint('Tick at least one, so Earshot knows which artists to look for.'); return; }
+    Object.assign(settings, { followed: f, top: tp, saved: sv });
+  }
+  if (step === 'keys'){
+    const c = $('#wClient').value.trim(), k = $('#wTm').value.trim();
+    if (!c || !k){ hint('Earshot needs both keys to find your gigs.'); return; }
+    Object.assign(settings, { clientId: c, tmKey: k });
+  }
+  store.set('gigcal.settings', settings);
+  go(view.wiz + 1);
+}
+function scanningHTML(){
+  return busy
+    ? '<div class="empty"><h2>Finding your gigs…</h2><p>Earshot is reading your Spotify artists and checking who’s on tour. This takes about a minute, and you can watch the progress above.</p></div>'
+    : '<div class="empty"><h2>Ready when you are</h2><p>Choose <b>Find my gigs</b> to start looking.</p></div>';
+}
+
 function render(){
   document.querySelectorAll('[data-tab]').forEach(b => b.dataset.tab === view.mode ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
   updateSummary();
   const main = $('#main');
+  const wiz = needsWizard();
+  document.body.classList.toggle('wizard', wiz);
+  if (wiz){ $('#toolbar').hidden = true; main.innerHTML = wizardHTML(); return; }
   $('#toolbar').hidden = !cache;
-  if (!cache && view.mode !== 'going'){ main.innerHTML = setupHTML(); return; }
+  if (!cache && view.mode !== 'going'){ main.innerHTML = store.get('gigcal.token', null) ? scanningHTML() : setupHTML(); return; }
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === view.mode));
   document.querySelectorAll('[data-filter]').forEach(b => b.setAttribute('aria-pressed', b.dataset.filter === view.filter));
   $('#monthnav').hidden = view.mode !== 'month';
@@ -921,13 +1091,15 @@ $('#saveSet').onclick = saveSettings;
 $('#findPlace').onclick = lookupPlace;
 $('#place').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); lookupPlace(); } });
 $('#geoBtn').onclick = useGeo;
-$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
+$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; view.wiz = 0; wizDraft = null; wizKeys = !settings.clientId || !settings.tmKey; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
 $('#mainBtn').onclick = () => store.get('gigcal.token', null) ? scan() : connectSpotify();
 $('#prevBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() - 1, 1); view.sel = null; render(); };
 $('#nextBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() + 1, 1); view.sel = null; render(); };
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { view.mode = b.dataset.mode; render(); });
 document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { view.filter = b.dataset.filter; render(); });
 $('#search').addEventListener('input', e => { view.q = e.target.value; render(); });
+document.addEventListener('input', e => { if (e.target.id === 'wRadius') $('#wRadiusVal').textContent = e.target.value; });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'wPlace'){ e.preventDefault(); wizAction('find'); } });
 $('#icsBtn').onclick = () => {
   const src = view.mode === 'going' ? Object.values(going).map(g => g.ev) : visibleEvents();
   const up = src.filter(e => e.date >= keyOf(new Date()));
@@ -935,13 +1107,15 @@ $('#icsBtn').onclick = () => {
   download('earshot-gigs.ics', icsText(up)); setStatus(`Exported ${up.length} gigs. Open earshot-gigs.ics to add them to your calendar.`);
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-sel],[data-sel-clear],[data-id],[data-day],[data-jump],[data-open-settings],[data-close],[data-ics],[data-going],[data-hotel-id]');
+  const t = e.target.closest('[data-wiz],[data-wiz-go],[data-sel],[data-sel-clear],[data-id],[data-day],[data-jump],[data-open-settings],[data-close],[data-ics],[data-going],[data-hotel-id]');
   if (!t) return;
   if (t.dataset.going){ toggleGoing(t.dataset.going); openEvent(t.dataset.going); render(); return; }
   if (t.dataset.hotelId){ if (going[t.dataset.hotelId]){ going[t.dataset.hotelId].hotel = t.dataset.hotelVal; saveGoing(); render(); } return; }
   if (t.dataset.ics){ const ev = findEvent(t.dataset.ics); if (ev) download(norm(ev.artists[0]) + '-' + ev.date + '.ics', icsText([ev])); return; }
   if (t.hasAttribute('data-close')){ closeDlg(t.closest('dialog')); return; }
   if (t.hasAttribute('data-open-settings')){ openSettings(); return; }
+  if (t.dataset.wiz){ wizAction(t.dataset.wiz); return; }
+  if (t.dataset.wizGo){ view.wiz = wizSteps().indexOf(t.dataset.wizGo); render(); window.scrollTo(0, 0); return; }
   if (t.dataset.sel){ view.sel = view.sel === t.dataset.sel ? null : t.dataset.sel; render(); return; }
   if (t.hasAttribute('data-sel-clear')){ view.sel = null; render(); return; }
   if (t.dataset.jump){ const d = parseDay(t.dataset.jump); view.month = new Date(d.getFullYear(), d.getMonth(), 1); view.sel = null; render(); return; }
@@ -954,8 +1128,8 @@ if ('serviceWorker' in navigator && !BAD_ORIGIN) navigator.serviceWorker.registe
 
 (async () => {
   updateButtons(); render();
-  try { if (await handleRedirect()){ updateButtons(); scan(); } }
-  catch(e){ setStatus('Couldn’t reach Spotify to finish signing in. Check your connection and try again.', true); }
+  try { if (await handleRedirect()){ updateButtons(); scan(); } else render(); }
+  catch(e){ render(); setStatus('Couldn’t reach Spotify to finish signing in. Check your connection and try again.', true); }
 })();
 })();
 </script>
