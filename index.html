@@ -173,6 +173,9 @@ dialog:has(.hero) .grab{background:rgb(255 255 255 / .9);box-shadow:0 0 0 1px rg
 .near .ph{color:var(--on-near);background:var(--near)}
 
 .tabbar{display:none}
+.donate{display:flex;align-items:center;justify-content:space-between;gap:14px 24px;flex-wrap:wrap;margin:40px 0 0;padding:18px 20px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+.donate p{margin:0;max-width:62ch}
+.donate-btn{background:var(--near);border-color:var(--near);color:var(--on-near);flex:none}
 /* Setup wizard */
 body.wizard .actions,body.wizard .tabbar{display:none !important}
 .wiz{max-width:540px;margin:22px auto 0;background:var(--surface);border-radius:22px;padding:28px 28px 24px}
@@ -238,6 +241,8 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
   .search{max-width:none;flex:1 1 0;min-width:0}
   .legend{display:none}
   .wide{display:none}
+  .donate{margin-top:28px;padding:18px 4px 8px;justify-content:center;text-align:center}
+  .donate-btn{padding:.45rem 1.1rem}
   body.wizard{padding-bottom:env(safe-area-inset-bottom,0px)}
   .wiz{margin-top:14px;padding:22px 18px 18px;border-radius:18px}
   .wiz h2{font-size:1.25rem}
@@ -317,6 +322,10 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
   </div>
 
   <main id="main"></main>
+  <footer class="donate" id="donate" hidden>
+    <p>Earshot is free, with no ads. If it’s helped you catch a gig, a small donation helps keep it going, even if it’s just enough for an Aldi ham sandwich.</p>
+    <a class="btn donate-btn" id="donateLink" href="#" target="_blank" rel="noopener">Donate with PayPal</a>
+  </footer>
 </div>
 
 <dialog id="settingsDlg" aria-labelledby="setTitle"><div class="grab" aria-hidden="true"></div>
@@ -402,6 +411,8 @@ const COUNTRIES = [['GB','United Kingdom'],['IE','Ireland'],['US','United States
   ['DK','Denmark'],['FI','Finland'],['PL','Poland'],['AT','Austria'],['CH','Switzerland'],['MX','Mexico']];
 // To share this page: fill in your Spotify Client ID and Ticketmaster key here,
 // so friends only have to sign in to Spotify and set their location.
+// Your PayPal.me link for the Donate button, for example 'https://paypal.me/yourname'. Leave blank to hide the button.
+const DONATE_URL = 'https://paypal.me/wellsey';
 const PRESET = { clientId: 'fdb820d5316249259c6c8e8a2c7564e0', tmKey: 'UI5zEIYSdUARAIU1j7tupInAGgyU7PVR' };
 const DEFAULTS = {clientId:PRESET.clientId, tmKey:PRESET.tmKey, country:'GB', lat:null, lng:null, place:'', radius:50, followed:true, top:true, saved:true, maxArtists:150};
 let settings = Object.assign({}, DEFAULTS, store.get('gigcal.settings', {}));
@@ -1123,6 +1134,8 @@ document.addEventListener('click', e => {
   if (t.dataset.id){ openEvent(t.dataset.id); }
 });
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) closeDlg(d); }));
+
+if (/^https:\/\/(www\.)?paypal\.(me|com)\/.+/i.test(DONATE_URL) && !/YOUR-PAYPAL-NAME/i.test(DONATE_URL)){ $('#donateLink').href = DONATE_URL; $('#donate').hidden = false; }
 
 if ('serviceWorker' in navigator && !BAD_ORIGIN) navigator.serviceWorker.register('sw.js').catch(() => {});
 
