@@ -521,7 +521,8 @@ async function collectArtists(){
   const add = (name, w, imgs) => { if (!name) return; const k = norm(name); if (!k) return; const e = m.get(k) || { name, w: 0, img: '' }; e.w += w;
     if (!e.img && imgs && imgs.length){ const s = imgs.slice().sort((a,b) => (a.width||640) - (b.width||640)); e.img = (s.find(i => (i.width||640) >= 300) || s[s.length-1]).url; }
     m.set(k, e); };
-  const soft = e => { if (e.message === 'auth') throw e; };
+  let blocked = false;
+  const soft = e => { if (e.message === 'auth') throw e; if (e.message === 'spotify 403') blocked = true; };
   if (settings.followed){
     try {
       let url = '/me/following?type=artist&limit=50';
@@ -546,7 +547,7 @@ async function collectArtists(){
       }
     } catch(e){ soft(e); problems.push('liked songs'); }
   }
-  return { artists: [...m.values()].sort((a,b) => b.w - a.w), problems };
+  return { artists: [...m.values()].sort((a,b) => b.w - a.w), problems, blocked };
 }
 
 /* ---------- Ticketmaster ---------- */
@@ -667,8 +668,13 @@ async function scan(){
   try {
     let who = '';
     try { setStatus('Checking which Spotify account is connected…'); who = (await sp('/me')).display_name || ''; } catch(e){ if (e.message === 'auth') throw e; }
-    const { artists, problems } = await collectArtists();
-    if (!artists.length){ setStatus('Spotify didn’t return any artists. Check which sources are ticked in Settings.', true); return; }
+    const { artists, problems, blocked } = await collectArtists();
+    if (!artists.length){
+      if (blocked) setStatus(`Spotify signed ${who || 'you'} in but won’t share any music with Earshot yet. The app’s owner needs to add this Spotify account’s email address under User Management in the Spotify developer dashboard.`, true);
+      else if (problems.length) setStatus(`Spotify wouldn’t share your ${problems.join(', ')}. Try Scan again in a minute.`, true);
+      else setStatus('This Spotify account doesn’t have any followed artists, most-played artists or liked songs yet. Follow or like a few artists in Spotify, or tick more sources in Settings, then scan again.', true);
+      return;
+    }
     const list = artists.slice(0, settings.maxArtists);
     const events = await findGigs(list);
     const prev = cache && cache.country === settings.country ? cache.events || [] : null;
