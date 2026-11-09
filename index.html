@@ -684,8 +684,9 @@ async function scan(){
     events.forEach(e => {
       const old = byId.get(e.id) || bySlot.get(slotOf(e));
       e.firstSeen = old ? (old.firstSeen || 0) : (prev ? t : 0);
-      e.seenNew = old ? !!old.seenNew : false;
+      e.seenNew = old ? (!!old.seenNew || seenAtStart.has(old.id) || (store.get('gigcal.seen', []) || []).includes(old.id)) : false;
     });
+    store.set('gigcal.seen', []); seenAtStart = new Set();
     const added = events.filter(e => e.firstSeen === t && e.date >= keyOf(new Date())).length;
     cache = { events, artistCount: list.length, fetchedAt: Date.now(), country: settings.country, problems, who };
     store.set('gigcal.cache', cache);
@@ -882,12 +883,13 @@ function scanningHTML(){
 }
 
 const NEW_DAYS = 14;
-const isNew = e => !!e.firstSeen && !e.seenNew && Date.now() - e.firstSeen < NEW_DAYS * 864e5;
+let seenAtStart = new Set(store.get('gigcal.seen', []));
+const isNew = e => !!e.firstSeen && !e.seenNew && !seenAtStart.has(e.id) && Date.now() - e.firstSeen < NEW_DAYS * 864e5;
 const newBadge = e => isNew(e) ? '<span class="new">New</span>' : '';
 const slotOf = e => e.date + '|' + norm(e.venue) + '|' + norm((e.artists || [])[0]);
 function markSeen(id){
-  const ev = (cache?.events || []).find(x => x.id === id);
-  if (ev && isNew(ev)){ ev.seenNew = true; store.set('gigcal.cache', cache); if (going[id]){ going[id].ev.seenNew = true; saveGoing(); } return true; }
+  const seen = new Set(store.get('gigcal.seen', []));
+  if (!seen.has(id)){ seen.add(id); store.set('gigcal.seen', [...seen]); }
   return false;
 }
 
@@ -1079,6 +1081,9 @@ function elsewhereLinks(e){
   ].filter(([, u]) => u);
 }
 function openEvent(id){
+  const dlg = $('#eventDlg');
+  dayBack = dlg.open && dlg.dataset.day ? dlg.dataset.day : null;
+  dlg.dataset.day = '';
   const raw = findEvent(id);
   const wasNew = raw && isNew(raw);
   if (!raw) return;
@@ -1097,16 +1102,18 @@ function openEvent(id){
       <button class="btn" data-ics="${esc(e.id)}">Add to calendar</button>
       ${(e.links && e.links.length ? e.links : e.url ? [{ src: 'Ticketmaster', url: e.url }] : []).map(l => `<a class="btn" href="${esc(l.url)}" target="_blank" rel="noopener">Tickets on ${esc(l.src)}</a>`).join('')}
       <a class="btn" href="${esc(maps)}" target="_blank" rel="noopener">Get directions</a>
-      <button class="btn" data-close>Close</button>
+      <button class="btn" data-close>${dayBack ? 'Back' : 'Close'}</button>
     </div>`;
   $('#eventDlg').scrollTop = 0;
   if (!$('#eventDlg').open) $('#eventDlg').showModal();
   if (wasNew && markSeen(id)) render();
 }
+let dayBack = null;
 function openDay(k){
+  dayBack = null; $('#eventDlg').dataset.day = k;
   const list = visibleEvents().filter(e => e.date === k);
   $('#eventBody').innerHTML = `<h2>${esc(fmtLong(k))}</h2><p class="meta">${list.length} gigs</p><div class="daylist">${list.map(e => rowHTML(e, false)).join('')}</div><div class="dlg-foot"><button class="btn" data-close>Close</button></div>`;
-  $('#eventDlg').showModal();
+  if (!$('#eventDlg').open) $('#eventDlg').showModal();
 }
 
 /* ---------- Calendar export ---------- */
@@ -1198,8 +1205,11 @@ if (BAD_ORIGIN){
 }
 
 $('#settingsBtn').onclick = openSettings;
+$('#eventDlg').addEventListener('close', () => { dayBack = null; $('#eventDlg').dataset.day = ''; });
 function closeDlg(d){
   if (!d || !d.open) return;
+  if (d.id === 'eventDlg' && dayBack){ const k = dayBack; dayBack = null; d.scrollTop = 0; openDay(k); return; }
+  if (d.id === 'eventDlg') d.dataset.day = '';
   const animate = window.matchMedia('(max-width: 700px)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (!animate){ d.close(); return; }
   d.style.transition = 'transform .22s ease-in'; d.style.transform = 'translateY(100%)';
