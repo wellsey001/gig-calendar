@@ -157,6 +157,13 @@ jobs:
         run: |
           [ -f "$RUNNER_TEMP/build.log" ] || exit 0
           # Put the end of the log in the error message, so it shows on the run's summary
-          tail -n 40 "$RUNNER_TEMP/build.log" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | grep -v '^[[:space:]]*$' | tail -n 30 > tail.txt
+          clean() { sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | grep -v '^[[:space:]]*$' | grep -v '^[[:space:]]*at '; }
+          if grep -q 'What went wrong' "$RUNNER_TEMP/build.log"; then
+            # Gradle's own explanation, without the long Java stack trace
+            { grep -iE '^e: |error:|FAILURE:' "$RUNNER_TEMP/build.log" | head -n 10
+              sed -n '/What went wrong/,/\* Try:/p' "$RUNNER_TEMP/build.log" | head -n 25; } | clean > tail.txt
+          else
+            tail -n 60 "$RUNNER_TEMP/build.log" | clean | tail -n 30 > tail.txt
+          fi
           msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' tail.txt)
           echo "::error title=Build log::$msg"
