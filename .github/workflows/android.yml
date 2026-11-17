@@ -86,9 +86,14 @@ jobs:
           size=$(wc -c < android.keystore)
           echo "Keystore: $size bytes, fingerprint $(sha256sum android.keystore | cut -c1-16)"
           [ "$size" -gt 1000 ] || { echo "::error::ANDROID_KEYSTORE_BASE64 looks cut short ($size bytes). Paste the whole of keystore-base64.txt again."; exit 1; }
+          # Fingerprint of the Earshot key made on 2026-11-17 (a hash of the file, not a secret).
+          # If you replace the key on purpose, update or remove this check.
+          expected="79684a88ff5527e073e8f582b4ec90307f6aab2da86c83a0a944e23f4c0030b8"
+          actual=$(sha256sum android.keystore | cut -d' ' -f1)
+          [ "$actual" = "$expected" ] || { echo "::error::ANDROID_KEYSTORE_BASE64 isn't the Earshot key ($size bytes, fingerprint ${actual:0:16}; expected 2660 bytes, ${expected:0:16}). Paste the whole of keystore-base64.txt into it again, not earshot.keystore."; exit 1; }
 
           keytool -list -keystore android.keystore -storepass "$ks_pass" > keys.txt 2>&1 \
-            || { echo "::error::ANDROID_KEYSTORE_PASSWORD doesn't open this keystore. Copy the keystore password again from signing-key-info.txt."; grep -v JAVA_TOOL keys.txt | head -3; exit 1; }
+            || { echo "::error::ANDROID_KEYSTORE_PASSWORD doesn't open this keystore. Copy the keystore password again from signing-key-info.txt."; echo "keytool said:"; grep -v JAVA_TOOL keys.txt | head -3; echo "Password received: ${#ks_pass} characters, starting ${ks_pass:0:2}, ending ${ks_pass: -2} (should be 24, y2, gP)"; exit 1; }
           grep -qi "^$alias," keys.txt \
             || { echo "::error::No key called '$alias' in the keystore. Set ANDROID_KEY_ALIAS to: $(grep -i PrivateKeyEntry keys.txt | cut -d, -f1 | head -1)"; exit 1; }
           rm -f keys.txt
