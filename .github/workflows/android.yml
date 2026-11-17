@@ -72,16 +72,32 @@ jobs:
       - name: Unpack the signing key and set the version
         working-directory: android
         run: |
-          echo "$KEYSTORE_B64" | base64 -d > android.keystore
-          alias="${KEY_ALIAS:-my-key-alias}"
+          # Tidy up stray spaces or line breaks from copying and pasting
+          ks_pass=$(printf '%s' "$BUBBLEWRAP_KEYSTORE_PASSWORD" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+          key_pass=$(printf '%s' "$BUBBLEWRAP_KEY_PASSWORD" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+          alias=$(printf '%s' "${KEY_ALIAS:-my-key-alias}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+          echo "::add-mask::$ks_pass"; echo "::add-mask::$key_pass"
+          echo "BUBBLEWRAP_KEYSTORE_PASSWORD=$ks_pass" >> "$GITHUB_ENV"
+          echo "BUBBLEWRAP_KEY_PASSWORD=$key_pass" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$alias" >> "$GITHUB_ENV"
+
+          printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 -d > android.keystore 2>/dev/null \
+            || { echo "::error::ANDROID_KEYSTORE_BASE64 isn't valid. Paste the whole of keystore-base64.txt again, with nothing added."; exit 1; }
+          size=$(wc -c < android.keystore)
+          echo "Keystore: $size bytes, fingerprint $(sha256sum android.keystore | cut -c1-16)"
+          [ "$size" -gt 1000 ] || { echo "::error::ANDROID_KEYSTORE_BASE64 looks cut short ($size bytes). Paste the whole of keystore-base64.txt again."; exit 1; }
+
+          keytool -list -keystore android.keystore -storepass "$ks_pass" > keys.txt 2>&1 \
+            || { echo "::error::ANDROID_KEYSTORE_PASSWORD doesn't open this keystore. Copy the keystore password again from signing-key-info.txt."; grep -v JAVA_TOOL keys.txt | head -3; exit 1; }
+          grep -qi "^$alias," keys.txt \
+            || { echo "::error::No key called '$alias' in the keystore. Set ANDROID_KEY_ALIAS to: $(grep -i PrivateKeyEntry keys.txt | cut -d, -f1 | head -1)"; exit 1; }
+          rm -f keys.txt
+
           jq --arg alias "$alias" \
              --argjson code "${{ github.run_number }}" \
              --arg name "1.0.${{ github.run_number }}" \
              '.signingKey.alias = $alias | .appVersionCode = $code | .appVersionName = $name' \
              twa-manifest.json > twa.tmp && mv twa.tmp twa-manifest.json
-          # Fail early with a clear message if the passwords or alias are wrong
-          keytool -list -keystore android.keystore -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" -alias "$alias" > /dev/null \
-            || { echo "::error::The keystore password or key alias is wrong. Check ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS."; exit 1; }
 
       - name: Generate the Android project
         working-directory: android
@@ -94,7 +110,7 @@ jobs:
       - name: Make assetlinks.json (hides the browser bar)
         working-directory: android
         run: |
-          alias="${KEY_ALIAS:-my-key-alias}"
+          alias="$KEY_ALIAS"
           sha=$(keytool -list -v -keystore android.keystore -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" -alias "$alias" \
                 | sed -n 's/.*SHA256: *//p' | head -1 | tr -d '[:space:]')
           pkg=$(jq -r .packageId twa-manifest.json)
