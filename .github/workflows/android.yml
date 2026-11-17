@@ -49,25 +49,29 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install Bubblewrap
-        run: npm install -g @bubblewrap/cli
+        run: |
+          set -o pipefail
+          npm install -g @bubblewrap/cli 2>&1 | tee -a "$RUNNER_TEMP/build.log"
+          bubblewrap --version 2>&1 | tee -a "$RUNNER_TEMP/build.log"
 
       - name: Point Bubblewrap at the runner's Java and Android SDK
         run: |
           mkdir -p ~/.bubblewrap
           printf '{"jdkPath":"%s","androidSdkPath":"%s"}\n' "$JAVA_HOME" "$ANDROID_HOME" > ~/.bubblewrap/config.json
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          ls "$ANDROID_HOME" "$ANDROID_HOME/build-tools" 2>&1 | tee -a "$RUNNER_TEMP/build.log"
 
       - name: Unpack the signing key and set the version
         working-directory: android
@@ -106,11 +110,18 @@ jobs:
 
       - name: Generate the Android project
         working-directory: android
-        run: bubblewrap update --skipVersionUpgrade --manifest=./twa-manifest.json
+        run: |
+          set -o pipefail
+          echo '--- bubblewrap update ---' >> "$RUNNER_TEMP/build.log"
+          bubblewrap update --skipVersionUpgrade --manifest=./twa-manifest.json < /dev/null 2>&1 | tee -a "$RUNNER_TEMP/build.log"
 
       - name: Build the signed APK
         working-directory: android
-        run: bubblewrap build --skipPwaValidation --manifest=./twa-manifest.json
+        run: |
+          set -o pipefail
+          echo '--- bubblewrap build ---' >> "$RUNNER_TEMP/build.log"
+          bubblewrap build --skipPwaValidation --manifest=./twa-manifest.json < /dev/null 2>&1 | tee -a "$RUNNER_TEMP/build.log"
+          ls -la | tee -a "$RUNNER_TEMP/build.log"
 
       - name: Make assetlinks.json (hides the browser bar)
         working-directory: android
@@ -136,3 +147,12 @@ jobs:
             --title "Earshot for Android 1.0.${{ github.run_number }}" \
             --notes "Download the .apk below and open it on your Android phone to install. It installs over earlier versions and keeps your gigs." \
             --latest
+
+      - name: Report what went wrong
+        if: failure()
+        run: |
+          [ -f "$RUNNER_TEMP/build.log" ] || exit 0
+          # Put the end of the log in the error message, so it shows on the run's summary
+          tail -n 40 "$RUNNER_TEMP/build.log" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | grep -v '^[[:space:]]*$' | tail -n 30 > tail.txt
+          msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' tail.txt)
+          echo "::error title=Build log::$msg"
