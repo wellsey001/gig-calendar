@@ -70,6 +70,11 @@ jobs:
           mkdir -p ~/.bubblewrap
           printf '{"jdkPath":"%s","androidSdkPath":"%s"}\n' "$JAVA_HOME" "$ANDROID_HOME" > ~/.bubblewrap/config.json
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          # Bubblewrap expects the older "tools" folder; point it at the modern command-line tools
+          if [ ! -e "$ANDROID_HOME/tools" ]; then
+            sudo ln -s "$ANDROID_HOME/cmdline-tools/latest" "$ANDROID_HOME/tools"
+          fi
+          ls "$ANDROID_HOME/tools/bin" 2>&1 | tee -a "$RUNNER_TEMP/build.log"
           ls "$ANDROID_HOME" "$ANDROID_HOME/build-tools" 2>&1 | tee -a "$RUNNER_TEMP/build.log"
 
       - name: Unpack the signing key and set the version
