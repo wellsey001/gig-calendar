@@ -64,7 +64,6 @@ jobs:
         run: |
           set -o pipefail
           npm install -g @bubblewrap/cli 2>&1 | tee -a "$RUNNER_TEMP/build.log"
-          bubblewrap --version 2>&1 | tee -a "$RUNNER_TEMP/build.log"
 
       - name: Point Bubblewrap at the runner's Java and Android SDK
         run: |
