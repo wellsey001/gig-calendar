@@ -16,6 +16,7 @@ See when the artists you listen to on Spotify are playing near you, or anywhere 
 - **Finds their gigs.** It checks Ticketmaster for upcoming shows by those artists in your chosen country. In the UK it can also check Skiddle, which is strong on smaller venues and festivals. Gigs listed on both are merged into one.
 - **Shows what’s near you.** Gigs within your chosen distance of home are “in earshot” and highlighted in yellow. Gigs further afield are shown in purple.
 - **Keeps track of the gigs you’re going to.** Mark a gig as “I’m going” and it appears in **My gigs** with a countdown and a reminder to book a hotel.
+- **Shows new music from your artists.** The **Releases** tab lists albums, EPs and singles released in the last 90 days, plus ones that have been announced, with a countdown to each release date.
 - **Fits into your own calendar.** Export gigs to Google Calendar, Apple Calendar or Outlook as an `.ics` file.
 - **Works on Android.** Install it as an app with its own icon, a bottom tab bar and swipe-up gig details.
 
@@ -84,6 +85,17 @@ Every gig you’ve marked as going, with:
 - **Been there**, a section at the bottom where past gigs move to.
 
 Your picks are kept when you scan again.
+
+### Releases
+
+New music from the artists Earshot scanned, checked in the background after each scan. Gig results appear first, and the Releases tab fills in a couple of minutes later.
+
+- **Coming soon** lists announced albums, EPs and singles, with a countdown. These come from [MusicBrainz](https://musicbrainz.org), a free, volunteer-run music database, so big releases usually appear but smaller artists may show up late or not at all. Releases with only a month or year announced show as “Expected March 2027” or “Expected 2027”.
+- **Out recently** lists releases from the last 90 days, straight from Spotify, with a **Play on Spotify** button.
+- Use **Everything**, **Albums & EPs** or **Singles** to narrow the list, and the search box to find an artist or title.
+- **Add to calendar** saves an upcoming release date to your calendar. **Export to calendar** on this tab saves every upcoming release that has a confirmed date.
+- Releases that appeared since the last check get a **New** label, like gigs.
+- **Check again** re-checks releases without rescanning for gigs.
 
 ### Exporting to your calendar
 
@@ -173,6 +185,7 @@ The Spotify Client ID and Ticketmaster key in `index.html` are visible to anyone
 ## Limitations
 
 - Gigs come from Ticketmaster, plus Skiddle in the UK, so shows sold only through other sites, such as Dice or See Tickets, won’t appear.
+- Upcoming releases depend on MusicBrainz volunteers adding them, so some announced releases won’t appear until close to release day, or at all.
 - Spotify’s Development Mode limits the app to five users and requires the owner to have Premium.
 - Artists are matched by name, so an artist who shares a name with another act can occasionally pick up the wrong gigs.
 

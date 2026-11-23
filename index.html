@@ -173,6 +173,31 @@ dialog:has(.hero) .grab{background:rgb(255 255 255 / .9);box-shadow:0 0 0 1px rg
 .near .ph{color:var(--on-near);background:var(--near)}
 
 .tabbar{display:none}
+/* Releases */
+.rel-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin:0 0 14px}
+.rel-note{color:var(--muted);font-size:.92rem;margin:0}
+.rel-note.alert{color:var(--alert);font-weight:700}
+.rel-sec{font-family:var(--display);font-size:1.2rem;font-weight:600;letter-spacing:-.03em;margin:26px 0 10px;display:flex;align-items:baseline;gap:10px}
+.rel-sec:first-of-type{margin-top:6px}
+.rel-sec small{font-family:var(--body);font-size:.85rem;font-weight:400;color:var(--muted);letter-spacing:0}
+.rels{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+.rel{display:grid;grid-template-columns:88px minmax(0,1fr);gap:14px;align-items:start;background:var(--surface);border-radius:14px;padding:12px}
+.rel.soon{box-shadow:inset 4px 0 0 var(--near)}
+.cover{width:88px;height:88px;border-radius:10px;object-fit:cover;display:block;background:var(--far-soft)}
+.cover.ph{display:grid;font-size:2rem}
+.rel-txt{min-width:0}
+.rel-title{display:block;font-weight:700;font-size:1.05rem;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.rel-artist{display:block;color:var(--muted);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rel-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0 0 4px;font-size:.78rem}
+.kind{font-weight:700;color:var(--far);background:var(--far-soft);border-radius:6px;padding:.15em .5em}
+.when{display:block;margin-top:4px;font-size:.88rem}
+.when b{color:var(--near-ink)}
+.rel-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.rel-acts .chip{font-size:.8rem;padding:.25rem .65rem}
+.rel-acts button.chip{font:inherit;font-size:.8rem;font-weight:700;cursor:pointer}
+.rel-acts button.chip::after{content:none}
+.past-rel .rel{opacity:.92}
+#relKind{flex:none}
 .elsewhere{margin:18px 0 0;padding-top:14px;border-top:1px solid var(--line)}
 .elsewhere h3{font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -251,6 +276,11 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
   .search{max-width:none;flex:1 1 0;min-width:0}
   .legend{display:none}
   .wide{display:none}
+  .rels{grid-template-columns:1fr}
+  .rel{grid-template-columns:72px minmax(0,1fr);gap:12px;padding:10px}
+  .cover{width:72px;height:72px}
+  #relKind{width:100%}
+  #relKind button{flex:1}
   .donate{margin-top:28px;padding:18px 4px 8px;justify-content:center;text-align:center}
   .donate-btn{padding:.45rem 1.1rem}
   body.wizard{padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -274,7 +304,7 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
   .dateblock b{font-size:1.25rem}
   #modeSeg,#settingsBtn{display:none}
   body{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
-  .tabbar{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
   .tabbar button{position:relative;font:inherit;font-size:.74rem;background:none;border:0;color:var(--muted);padding:10px 0 7px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
   .tabbar button[aria-current="page"]{color:var(--ink);font-weight:700}
   .tabbar button[aria-current="page"]::before{content:"";position:absolute;top:0;left:32%;right:32%;height:3px;border-radius:0 0 3px 3px;background:var(--near)}
@@ -321,6 +351,7 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
       <button data-mode="month">Month</button>
       <button data-mode="list">List</button>
       <button data-mode="going">My gigs</button>
+      <button data-mode="releases">Releases</button>
     </div>
     <div class="seg" id="filterSeg" role="group" aria-label="Which gigs">
       <button data-filter="all">All gigs</button>
@@ -329,7 +360,7 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
     </div>
     <input class="search" id="search" type="search" placeholder="Search gigs" aria-label="Filter by artist or venue">
     <button class="btn small" id="icsBtn">Export<span class="wide"> to calendar</span></button>
-    <div class="legend"><span class="lnear">In earshot</span><span>Further afield</span></div>
+    <div class="legend" id="legend"><span class="lnear">In earshot</span><span>Further afield</span></div>
   </div>
 
   <main id="main"></main>
@@ -401,6 +432,7 @@ body.wizard .actions,body.wizard .tabbar{display:none !important}
   <button data-tab="month"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Calendar</span></button>
   <button data-tab="list"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg><span>List</span></button>
   <button data-tab="going"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h13A1.5 1.5 0 0 1 20 7.5v2a2.5 2.5 0 0 0 0 5v2a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5v-2a2.5 2.5 0 0 0 0-5z"/><path d="M14.5 6.5v11" stroke-dasharray="1.5 2"/></svg><span>My gigs</span></button>
+  <button data-tab="releases"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5"/></svg><span>Releases</span></button>
   <button data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>Settings</span></button>
 </nav>
 
@@ -448,7 +480,7 @@ function daysUntil(s){ const t = new Date(); t.setHours(0,0,0,0); return Math.ro
 const HOTEL = { todo: 'Not booked', booked: 'Booked', none: 'Not needed' };
 const small = window.matchMedia('(max-width: 700px)').matches;
 const now = new Date();
-let view = { mode: 'month', sel: null, filter: 'all', month: new Date(now.getFullYear(), now.getMonth(), 1), q: '' };
+let view = { mode: 'month', sel: null, relKind: 'all', filter: 'all', month: new Date(now.getFullYear(), now.getMonth(), 1), q: '' };
 let busy = false;
 const REDIRECT = location.origin + location.pathname.replace(/index\.html$/, '');
 
@@ -518,7 +550,7 @@ async function sp(path){
 /* ---------- Read the library ---------- */
 async function collectArtists(){
   const m = new Map(), problems = [];
-  const add = (name, w, imgs) => { if (!name) return; const k = norm(name); if (!k) return; const e = m.get(k) || { name, w: 0, img: '' }; e.w += w;
+  const add = (name, w, imgs, id) => { if (!name) return; const k = norm(name); if (!k) return; const e = m.get(k) || { name, w: 0, img: '', id: '' }; e.w += w; if (!e.id && id) e.id = id;
     if (!e.img && imgs && imgs.length){ const s = imgs.slice().sort((a,b) => (a.width||640) - (b.width||640)); e.img = (s.find(i => (i.width||640) >= 300) || s[s.length-1]).url; }
     m.set(k, e); };
   let blocked = false;
@@ -526,14 +558,14 @@ async function collectArtists(){
   if (settings.followed){
     try {
       let url = '/me/following?type=artist&limit=50';
-      while (url){ setStatus('Reading the artists you follow…'); const d = await sp(url); (d.artists?.items || []).forEach(a => add(a.name, 5, a.images)); url = d.artists?.next; }
+      while (url){ setStatus('Reading the artists you follow…'); const d = await sp(url); (d.artists?.items || []).forEach(a => add(a.name, 5, a.images, a.id)); url = d.artists?.next; }
     } catch(e){ soft(e); problems.push('followed artists'); }
   }
   if (settings.top){
     try {
       for (const range of ['long_term','medium_term','short_term']){
         setStatus('Reading your most-played artists…');
-        const d = await sp('/me/top/artists?limit=50&time_range=' + range); (d.items || []).forEach(a => add(a.name, 3, a.images));
+        const d = await sp('/me/top/artists?limit=50&time_range=' + range); (d.items || []).forEach(a => add(a.name, 3, a.images, a.id));
       }
     } catch(e){ soft(e); problems.push('most-played artists'); }
   }
@@ -542,7 +574,7 @@ async function collectArtists(){
       let url = '/me/tracks?limit=50', n = 0;
       while (url && n < 2000){
         const d = await sp(url);
-        (d.items || []).forEach(it => ((it.track || it.item || {}).artists || []).forEach(a => add(a.name, 1)));
+        (d.items || []).forEach(it => ((it.track || it.item || {}).artists || []).forEach(a => add(a.name, 1, null, a.id)));
         n += (d.items || []).length; setStatus(`Reading your liked songs (${n})…`); url = d.next;
       }
     } catch(e){ soft(e); problems.push('liked songs'); }
@@ -665,6 +697,7 @@ async function scan(){
   if (busy) return;
   if (!settings.tmKey){ openSettings(); setStatus('Add a Ticketmaster API key first.', true); return; }
   busy = true; updateButtons(); render();
+  const seenSnap = new Set([...seenAtStart, ...(store.get('gigcal.seen', []) || [])]);
   try {
     let who = '';
     try { setStatus('Checking which Spotify account is connected…'); who = (await sp('/me')).display_name || ''; } catch(e){ if (e.message === 'auth') throw e; }
@@ -676,6 +709,7 @@ async function scan(){
       return;
     }
     const list = artists.slice(0, settings.maxArtists);
+    store.set('gigcal.artists', list.map(a => ({ name: a.name, id: a.id || '', img: a.img || '' })));
     const events = await findGigs(list);
     const prev = cache && cache.country === settings.country ? cache.events || [] : null;
     const byId = new Map(), bySlot = new Map();
@@ -696,12 +730,158 @@ async function scan(){
     setStatus([newMsg, problems.length ? `Spotify wouldn’t share your ${problems.join(' or ')}.` : '', skProblem].filter(Boolean).join(' '));
     if (added) view.filter = 'new';
     render();
+    scanReleases(seenSnap);
   } catch(e){
     if (e.message === 'auth'){ store.del('gigcal.token'); setStatus('Your Spotify connection has expired. Connect again.', true); }
     else if (e.message === 'tmkey') setStatus('Ticketmaster rejected the API key. Check it in Settings.', true);
     else if (e.message === 'spotify 403') setStatus('Spotify blocked the request. Make sure your account is on the app’s user list in the Spotify dashboard.', true);
     else setStatus(String(e.message || e), true);
   } finally { busy = false; updateButtons(); render(); }
+}
+
+/* ---------- Releases: recent from Spotify, upcoming from MusicBrainz ---------- */
+let rel = store.get('gigcal.releases', null);
+let relBusy = false, relRun = 0, relProgress = '';
+const REL_BACK_DAYS = 90;
+const todayKey = () => keyOf(new Date());
+const daysFromToday = s => Math.round((parseDay(s) - parseDay(todayKey())) / 864e5);
+function addDays(k, n){ const d = parseDay(k); d.setDate(d.getDate() + n); return keyOf(d); }
+// A release date can be a full day, or only a month or year ("2027-03", "2027")
+const fullDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+function relUpcoming(r){
+  const t = todayKey();
+  if (fullDate(r.date)) return r.date >= t;
+  if (/^\d{4}-\d{2}$/.test(r.date)) return r.date >= t.slice(0, 7);
+  if (/^\d{4}$/.test(r.date)) return r.date >= t.slice(0, 4);
+  return false;
+}
+function relKind(type, tracks){
+  const t = String(type || '').toLowerCase();
+  if (t === 'ep') return 'EP';
+  if (t === 'single') return tracks >= 4 ? 'EP' : 'Single';
+  if (t === 'compilation') return 'Compilation';
+  return 'Album';
+}
+function relProgressUpdate(msg){
+  relProgress = msg;
+  const el = document.getElementById('relProgress');
+  if (el) el.textContent = msg;
+}
+async function spRecentReleases(artists, run){
+  const out = [], since = addDays(todayKey(), -REL_BACK_DAYS);
+  const withId = artists.filter(a => a.id);
+  for (let i = 0; i < withId.length; i++){
+    if (run !== relRun) return null;
+    const a = withId[i];
+    relProgressUpdate(`Checking new music from ${a.name} (${i + 1} of ${withId.length})…`);
+    for (const group of ['album', 'single']){
+      let d;
+      try { d = await sp(`/artists/${encodeURIComponent(a.id)}/albums?include_groups=${group}&limit=10`); }
+      catch(e){ if (e.message === 'auth' || e.message === 'spotify 403') throw e; continue; }   // skip just this artist
+      for (const al of (d.items || [])){
+        const date = al.release_date || '';
+        if (!date) continue;
+        // Spotify gives day, month or year precision; only count full or partial dates in the window
+        const cmp = date.length === 4 ? date + '-12-31' : date.length === 7 ? date + '-28' : date;
+        if (cmp < since) continue;
+        out.push({ id: 'sp-' + al.id, src: 'spotify', title: al.name || '', artist: a.name,
+          credits: (al.artists || []).map(x => x.name), kind: relKind(al.album_type, al.total_tracks),
+          date, img: (al.images || []).slice().sort((x, y) => (x.width || 640) - (y.width || 640)).find(im => (im.width || 640) >= 200)?.url || al.images?.[0]?.url || '',
+          artistImg: a.img || '', url: al.external_urls?.spotify || '' });
+      }
+      await sleep(120);
+    }
+  }
+  return out;
+}
+const MB = 'https://musicbrainz.org/ws/2/';
+let mbNext = 0;
+async function mb(query){
+  for (let i = 0; i < 3; i++){
+    const wait = mbNext - Date.now(); if (wait > 0) await sleep(wait);
+    mbNext = Date.now() + 1100;   // MusicBrainz asks for no more than one request a second
+    let r;
+    try { r = await fetch(MB + 'release-group?' + new URLSearchParams({ query, limit: '100', fmt: 'json' }), { headers: { Accept: 'application/json' } }); }
+    catch(e){ throw new Error('mbnet'); }
+    if (r.status === 503 || r.status === 429){ mbNext = Date.now() + 3000 * (i + 1); continue; }
+    if (!r.ok) throw new Error('mb ' + r.status);
+    return r.json();
+  }
+  throw new Error('mbbusy');
+}
+const luceneName = n => '"' + String(n).replace(/[\\"]/g, ' ').trim() + '"';
+async function mbUpcoming(artists, run){
+  const byNorm = new Map(artists.map(a => [norm(a.name), a]));
+  const out = [], t = todayKey(), skip = /compilation|dj-mix|interview|audiobook|spokenword|audio drama|field recording/i;
+  const names = artists.map(a => a.name).filter(n => norm(n).length >= 2);
+  const per = 15;
+  for (let i = 0; i < names.length; i += per){
+    if (run !== relRun) return null;
+    relProgressUpdate(`Looking for announced releases (${Math.min(i + per, names.length)} of ${names.length} artists)…`);
+    const batch = names.slice(i, i + per).map(luceneName).join(' OR ');
+    const d = await mb(`firstreleasedate:[${t} TO 2099-12-31] AND (artistname:(${batch}) OR artist:(${batch}))`);
+    for (const g of (d['release-groups'] || [])){
+      const date = g['first-release-date'] || '';
+      const primary = g['primary-type'] || '';
+      if (!date || !/^(Album|EP|Single)$/.test(primary)) continue;
+      if ((g['secondary-types'] || []).some(x => skip.test(x))) continue;
+      const credits = (g['artist-credit'] || []).map(c => c.name || c.artist?.name || '').filter(Boolean);
+      const match = credits.map(c => byNorm.get(norm(c))).find(Boolean);
+      if (!match) continue;   // a different act whose name merely contains the search words
+      const item = { id: 'mb-' + g.id, src: 'musicbrainz', title: g.title || '', artist: match.name, credits,
+        kind: relKind(primary), date, img: `https://coverartarchive.org/release-group/${g.id}/front-250`,
+        artistImg: match.img || '', url: `https://musicbrainz.org/release-group/${g.id}` };
+      if (relUpcoming(item)) out.push(item);
+    }
+  }
+  return out;
+}
+async function scanReleases(seenSnap){
+  const artists = store.get('gigcal.artists', []) || [];
+  if (!artists.length) return;
+  const run = ++relRun; relBusy = true;
+  const seen = seenSnap || new Set([...seenAtStart, ...(store.get('gigcal.seen', []) || [])]);
+  relProgressUpdate('Checking for new music…');
+  if (view.mode === 'releases') render();
+  const problems = [];
+  let recent = [], upcoming = [];
+  try { recent = await spRecentReleases(artists, run); }
+  catch(e){ recent = []; problems.push(e.message === 'auth' ? 'spotify-auth' : 'spotify'); }
+  if (recent === null) return;
+  try { upcoming = await mbUpcoming(artists, run); }
+  catch(e){ upcoming = []; problems.push('musicbrainz'); }
+  if (upcoming === null || run !== relRun) return;
+  // Merge: one entry per artist and title; prefer Spotify's artwork and link
+  const merged = new Map();
+  for (const r of [...recent, ...upcoming]){
+    const k = norm(r.artist) + '|' + norm(r.title);
+    const had = merged.get(k);
+    if (!had){ merged.set(k, r); continue; }
+    if (had.src !== 'spotify' && r.src === 'spotify') merged.set(k, Object.assign({}, r, { mbUrl: had.url }));
+    else if (had.src === 'spotify' && r.src !== 'spotify' && !had.mbUrl) had.mbUrl = r.url;
+  }
+  const items = [...merged.values()];
+  // "New" labels, the same way as gigs: anything not there at the last check
+  const prev = rel && rel.items ? rel.items : null;
+  const prevById = new Map((prev || []).map(x => [x.id, x]));
+  const prevByKey = new Map((prev || []).map(x => [norm(x.artist) + '|' + norm(x.title), x]));
+  const now = Date.now();
+  for (const r of items){
+    const old = prevById.get(r.id) || prevByKey.get(norm(r.artist) + '|' + norm(r.title));
+    r.firstSeen = old ? (old.firstSeen || 0) : (prev ? now : 0);
+    r.seenNew = old ? (!!old.seenNew || seen.has(old.id)) : false;
+  }
+  // Keep a failed source's previous results rather than wiping them
+  if (prev){
+    const keepSrc = problems.includes('musicbrainz') ? 'musicbrainz' : problems.some(p => p.startsWith('spotify')) ? 'spotify' : '';
+    if (keepSrc) for (const old of prev) if (old.src === keepSrc && !items.some(x => x.id === old.id)) items.push(old);
+  }
+  rel = { items, fetchedAt: now, artistCount: artists.length, problems };
+  store.set('gigcal.releases', rel);
+  relBusy = false; relProgressUpdate('');
+  const fresh = items.filter(r => r.firstSeen === now).length;
+  if (fresh && view.mode !== 'releases') setStatus(($('#status').textContent ? $('#status').textContent + ' ' : '') + `Found ${fresh} new ${fresh === 1 ? 'release' : 'releases'}. See the Releases tab.`);
+  render();
 }
 
 /* ---------- Distance ---------- */
@@ -742,6 +922,7 @@ function picHTML(url, name, cls){
 document.addEventListener('error', ev => {
   const t = ev.target;
   if (t.tagName !== 'IMG' || t.dataset.ph === undefined) return;
+  if (t.dataset.alt){ const alt = t.dataset.alt; delete t.dataset.alt; t.src = alt; return; }
   if (t.classList.contains('hero')){ t.remove(); return; }
   const sp = document.createElement('span'); sp.className = t.className + ' ph'; sp.textContent = t.dataset.ph; t.replaceWith(sp);
 }, true);
@@ -900,8 +1081,8 @@ function render(){
   const wiz = needsWizard();
   document.body.classList.toggle('wizard', wiz);
   if (wiz){ $('#toolbar').hidden = true; main.innerHTML = wizardHTML(); return; }
-  $('#toolbar').hidden = !cache;
-  if (!cache && view.mode !== 'going'){ main.innerHTML = store.get('gigcal.token', null) ? scanningHTML() : setupHTML(); return; }
+  $('#toolbar').hidden = !cache && view.mode !== 'releases';
+  if (!cache && view.mode !== 'going' && view.mode !== 'releases'){ main.innerHTML = store.get('gigcal.token', null) ? scanningHTML() : setupHTML(); return; }
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === view.mode));
   const newCount = cache ? cache.events.filter(e => isNew(e) && e.date >= keyOf(new Date())).length : 0;
   if (!newCount && view.filter === 'new') view.filter = 'all';
@@ -909,9 +1090,12 @@ function render(){
   $('#filterNew').textContent = newCount ? `New (${newCount})` : 'New';
   document.querySelectorAll('[data-filter]').forEach(b => b.setAttribute('aria-pressed', b.dataset.filter === view.filter));
   $('#monthnav').hidden = view.mode !== 'month';
-  $('#filterSeg').hidden = view.mode === 'going';
+  $('#filterSeg').hidden = view.mode === 'going' || view.mode === 'releases';
+  $('#legend').hidden = view.mode === 'releases';
+  $('#search').placeholder = view.mode === 'releases' ? 'Search releases' : 'Search gigs';
   $('#monthName').textContent = fmtMonth(view.month);
   const evs = visibleEvents();
+  if (view.mode === 'releases'){ main.innerHTML = releasesHTML(); return; }
   if (view.filter === 'near' && settings.lat == null && view.mode !== 'going'){
     main.innerHTML = `<div class="empty"><h2>Set your location to see what’s in earshot</h2><p>Add a postcode or use your current location in Settings.</p><button class="btn primary" data-open-settings>Open settings</button></div>`;
     return;
@@ -1030,6 +1214,84 @@ function gigCard(e){
     <div class="where">${esc(fmtLong(e.date))}${e.time ? ', ' + fmtTime(e.time) : ''}<br>${esc([e.venue, e.city].filter(Boolean).join(', '))}${e.dist != null ? ', ' + esc(distText(e)) + ' away' : ''}</div>
     ${n < 0 ? '' : `<div class="hotel"><span>Hotel</span><div class="seg" role="group" aria-label="Hotel for ${esc(e.artists[0])}">${opt('todo')}${opt('booked')}${opt('none')}</div></div>`}
   </div></div>`;
+}
+
+function relWhen(r){
+  const up = relUpcoming(r);
+  if (fullDate(r.date)){
+    const n = daysFromToday(r.date);
+    const d = parseDay(r.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: parseDay(r.date).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+    if (n === 0) return `<b>Out today</b>, ${esc(d)}`;
+    if (n === 1) return `<b>Out tomorrow</b>, ${esc(d)}`;
+    if (n > 1) return `<b>In ${n} days</b>, ${esc(d)}`;
+    if (n === -1) return `Out yesterday`;
+    if (n > -14) return `Out ${-n} days ago, ${esc(d)}`;
+    return `Out ${Math.round(-n / 7)} weeks ago, ${esc(d)}`;
+  }
+  if (/^\d{4}-\d{2}$/.test(r.date)){
+    const m = parseDay(r.date + '-01').toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    return up ? `<b>Expected ${esc(m)}</b>` : `Out ${esc(m)}`;
+  }
+  return up ? `<b>Expected ${esc(r.date)}</b>` : `Out ${esc(r.date)}`;
+}
+function relCard(r){
+  const up = relUpcoming(r);
+  const more = r.credits && r.credits.length > 1 ? r.credits.join(', ') : r.artist;
+  const acts = [];
+  if (r.src === 'spotify' && r.url) acts.push(`<a class="chip" href="${esc(r.url)}" target="_blank" rel="noopener">${up ? 'Open in Spotify' : 'Play on Spotify'}</a>`);
+  if (up && fullDate(r.date)) acts.push(`<button class="chip" data-rel-ics="${esc(r.id)}">Add to calendar</button>`);
+  const mbLink = r.src === 'musicbrainz' ? r.url : r.mbUrl;
+  if (mbLink) acts.push(`<a class="chip" href="${esc(mbLink)}" target="_blank" rel="noopener">Details</a>`);
+  const pic = `<img class="cover" src="${esc(r.img || r.artistImg || '')}" alt="" loading="lazy" referrerpolicy="no-referrer" data-ph="${esc(String(r.artist).trim().charAt(0).toUpperCase())}"${r.img && r.artistImg ? ` data-alt="${esc(r.artistImg)}"` : ''}>`;
+  return `<article class="rel${up ? ' soon' : ''}">
+    ${r.img || r.artistImg ? pic : picHTML('', r.artist, 'cover')}
+    <div class="rel-txt">
+      <p class="rel-meta"><span class="kind">${esc(r.kind)}</span>${newBadge(r)}</p>
+      <span class="rel-title">${esc(r.title)}</span>
+      <span class="rel-artist">${esc(more)}</span>
+      <span class="when">${relWhen(r)}</span>
+      ${acts.length ? `<div class="rel-acts">${acts.join('')}</div>` : ''}
+    </div>
+  </article>`;
+}
+function releasesHTML(){
+  const kindSeg = `<div class="seg" id="relKind" role="group" aria-label="Release type">
+      <button data-relkind="all" aria-pressed="${view.relKind === 'all'}">Everything</button>
+      <button data-relkind="albums" aria-pressed="${view.relKind === 'albums'}">Albums &amp; EPs</button>
+      <button data-relkind="singles" aria-pressed="${view.relKind === 'singles'}">Singles</button>
+    </div>`;
+  const artists = store.get('gigcal.artists', []) || [];
+  const progress = `<p class="rel-note" id="relProgress" role="status">${relBusy ? esc(relProgress) : ''}</p>`;
+  if (!rel){
+    if (relBusy) return `<div class="rel-head">${progress}</div><div class="empty"><h2>Checking your artists for new music…</h2><p>Earshot is looking up recent releases on Spotify and announced albums on MusicBrainz. This takes a couple of minutes, and the gigs tabs keep working meanwhile.</p></div>`;
+    return `<div class="empty"><h2>New music from your artists</h2><p>${artists.length ? 'Check your artists for recent and upcoming albums, EPs and singles.' : 'Releases are checked after each scan. Choose <b>Scan again</b> to look for new music from your artists.'}</p>${artists.length ? '<button class="btn primary" data-rel-scan>Check for new music</button>' : ''}</div>`;
+  }
+  const q = view.q.trim().toLowerCase();
+  const items = rel.items.filter(r => (view.relKind === 'albums' ? r.kind !== 'Single' : view.relKind === 'singles' ? r.kind === 'Single' : true)
+    && (!q || (r.title + ' ' + (r.credits || []).join(' ') + ' ' + r.artist).toLowerCase().includes(q)));
+  const sortKey = r => fullDate(r.date) ? r.date : /^\d{4}-\d{2}$/.test(r.date) ? r.date + '-32' : r.date + '-13-32';
+  const soon = items.filter(relUpcoming).sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  const recent = items.filter(r => !relUpcoming(r)).sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+  // Opening the tab counts as seeing these; the labels clear next time, not while you look
+  items.forEach(r => { if (isNew(r)) markSeen(r.id); });
+  const ago = Math.round((Date.now() - rel.fetchedAt) / 3600000);
+  const when = ago < 1 ? 'within the last hour' : ago < 48 ? ago + ' hours ago' : Math.round(ago / 24) + ' days ago';
+  const notes = [];
+  if (rel.problems.includes('musicbrainz')) notes.push('Couldn’t reach MusicBrainz, so upcoming releases may be missing or out of date.');
+  if (rel.problems.includes('spotify')) notes.push('Spotify didn’t share recent releases this time.');
+  if (rel.problems.includes('spotify-auth')) notes.push('Connect Spotify again to see recent releases.');
+  let h = `<div class="rel-head">${kindSeg}<span class="rel-note">Checked ${esc(when)} for ${rel.artistCount} artists. <button class="linkish" data-rel-scan${relBusy ? ' disabled' : ''}>Check again</button></span></div>`;
+  h += progress;
+  if (notes.length) h += `<p class="rel-note alert">${esc(notes.join(' '))}</p>`;
+  if (!items.length){
+    h += `<div class="empty"><h2>${q || view.relKind !== 'all' ? 'Nothing matches that' : 'No new music right now'}</h2><p>${q || view.relKind !== 'all' ? 'Clear the search or choose Everything.' : `None of your artists has released anything in the last ${REL_BACK_DAYS} days, and nothing has been announced on MusicBrainz yet.`}</p></div>`;
+    return h;
+  }
+  h += `<h2 class="rel-sec">Coming soon <small>${soon.length ? soon.length + ' announced' : ''}</small></h2>`;
+  h += soon.length ? `<div class="rels">${soon.map(relCard).join('')}</div>` : `<p class="agenda-empty">Nothing announced yet. Upcoming releases come from MusicBrainz, a volunteer-run music database, so smaller artists may appear late.</p>`;
+  h += `<h2 class="rel-sec">Out recently <small>last ${REL_BACK_DAYS} days</small></h2>`;
+  h += recent.length ? `<div class="rels past-rel">${recent.map(relCard).join('')}</div>` : `<p class="agenda-empty">Nothing released in the last ${REL_BACK_DAYS} days.</p>`;
+  return h;
 }
 
 function setupHTML(){
@@ -1242,7 +1504,7 @@ $('#saveSet').onclick = saveSettings;
 $('#findPlace').onclick = lookupPlace;
 $('#place').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); lookupPlace(); } });
 $('#geoBtn').onclick = useGeo;
-$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; view.wiz = 0; wizDraft = null; wizKeys = !settings.clientId || !settings.tmKey; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
+$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; store.del('gigcal.releases'); store.del('gigcal.artists'); rel = null; relRun++; relBusy = false; view.wiz = 0; wizDraft = null; wizKeys = !settings.clientId || !settings.tmKey; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
 $('#mainBtn').onclick = () => store.get('gigcal.token', null) ? scan() : connectSpotify();
 $('#prevBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() - 1, 1); view.sel = null; render(); };
 $('#nextBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() + 1, 1); view.sel = null; render(); };
@@ -1251,15 +1513,27 @@ document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { view
 $('#search').addEventListener('input', e => { view.q = e.target.value; render(); });
 document.addEventListener('input', e => { if (e.target.id === 'wRadius') $('#wRadiusVal').textContent = e.target.value; });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'wPlace'){ e.preventDefault(); wizAction('find'); } });
+function relAsEvent(r){
+  return { id: r.id, date: r.date, time: '', artists: [`${r.artist}: ${r.title} (${r.kind}) out`], venue: '', city: '', url: r.src === 'spotify' ? r.url : (r.url || '') };
+}
 $('#icsBtn').onclick = () => {
+  if (view.mode === 'releases'){
+    const up = (rel?.items || []).filter(r => relUpcoming(r) && fullDate(r.date)).map(relAsEvent);
+    if (!up.length){ setStatus('There are no upcoming releases with a confirmed date to export.', true); return; }
+    download('earshot-releases.ics', icsText(up)); setStatus(`Exported ${up.length} release ${up.length === 1 ? 'date' : 'dates'}. Open earshot-releases.ics to add them to your calendar.`);
+    return;
+  }
   const src = view.mode === 'going' ? Object.values(going).map(g => g.ev) : visibleEvents();
   const up = src.filter(e => e.date >= keyOf(new Date()));
   if (!up.length){ setStatus('There are no upcoming gigs in this view to export.', true); return; }
   download('earshot-gigs.ics', icsText(up)); setStatus(`Exported ${up.length} gigs. Open earshot-gigs.ics to add them to your calendar.`);
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-wiz],[data-wiz-go],[data-sel],[data-sel-clear],[data-id],[data-day],[data-jump],[data-open-settings],[data-close],[data-ics],[data-going],[data-hotel-id]');
+  const t = e.target.closest('[data-relkind],[data-rel-scan],[data-rel-ics],[data-wiz],[data-wiz-go],[data-sel],[data-sel-clear],[data-id],[data-day],[data-jump],[data-open-settings],[data-close],[data-ics],[data-going],[data-hotel-id]');
   if (!t) return;
+  if (t.dataset.relkind){ view.relKind = t.dataset.relkind; render(); return; }
+  if (t.hasAttribute('data-rel-scan')){ if (!relBusy) scanReleases(); return; }
+  if (t.dataset.relIcs){ const r = (rel?.items || []).find(x => x.id === t.dataset.relIcs); if (r) download(norm(r.artist) + '-' + norm(r.title).slice(0, 30) + '.ics', icsText([relAsEvent(r)])); return; }
   if (t.dataset.going){ toggleGoing(t.dataset.going); openEvent(t.dataset.going); render(); return; }
   if (t.dataset.hotelId){ if (going[t.dataset.hotelId]){ going[t.dataset.hotelId].hotel = t.dataset.hotelVal; saveGoing(); render(); } return; }
   if (t.dataset.ics){ const ev = findEvent(t.dataset.ics); if (ev) download(norm(ev.artists[0]) + '-' + ev.date + '.ics', icsText([ev])); return; }
