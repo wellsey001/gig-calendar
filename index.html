@@ -769,15 +769,29 @@ function relProgressUpdate(msg){
 }
 /* Spotify: one request per artist, spaced out so Spotify never makes us wait,
    and each artist is only re-checked every few days (progress is kept between checks). */
-const SP_RECHECK_DAYS = 3, SP_GAP_MS = 1500;
+const SP_RECHECK_DAYS = 3;
 let spNext = 0, spLimit = 20;
+// How fast Spotify will let us go, learned as we go and remembered between visits
+let spPace = Object.assign({ gap: 2000, until: 0, ok: 0 }, store.get('gigcal.spPace', {}) || {});
+const saveSpPace = () => store.set('gigcal.spPace', spPace);
+async function spRel(path){
+  const tok = await accessToken();
+  if (!tok) throw new Error('auth');
+  let r;
+  try { r = await fetch('https://api.spotify.com/v1' + path, { headers: { Authorization: 'Bearer ' + tok } }); }
+  catch(e){ throw new Error('spnet'); }
+  if (r.status === 429){ const e = new Error('sp429'); e.retry = Number(r.headers.get('Retry-After')) || 60; throw e; }
+  if (r.status === 401) throw new Error('auth');
+  if (!r.ok) throw new Error('spotify ' + r.status);
+  return r.json();
+}
 async function spArtistReleases(a){
   const since = addDays(todayKey(), -REL_BACK_DAYS);
   let d;
   for (let tries = 0; tries < 2; tries++){
     const wait = spNext - Date.now(); if (wait > 0) await sleep(wait);
-    spNext = Date.now() + SP_GAP_MS;
-    try { d = await sp(`/artists/${encodeURIComponent(a.id)}/albums?include_groups=album,single&limit=${spLimit}`); break; }
+    spNext = Date.now() + spPace.gap;
+    try { d = await spRel(`/artists/${encodeURIComponent(a.id)}/albums?include_groups=album,single&limit=${spLimit}`); break; }
     catch(e){ if (e.message === 'spotify 400' && spLimit > 10){ spLimit = 10; continue; } throw e; }
   }
   const out = [];
@@ -796,13 +810,18 @@ async function spArtistReleases(a){
 const MB = 'https://musicbrainz.org/ws/2/';
 let mbNext = 0;
 async function mb(query){
-  for (let i = 0; i < 3; i++){
+  // MusicBrainz turns requests away at random when it's busy ("retry after 1 second"), so keep trying for a while
+  for (let i = 0; i < 8; i++){
     const wait = mbNext - Date.now(); if (wait > 0) await sleep(wait);
-    mbNext = Date.now() + 1100;   // MusicBrainz asks for no more than one request a second
+    mbNext = Date.now() + 1100;   // no more than one request a second
     let r;
     try { r = await fetch(MB + 'release-group?' + new URLSearchParams({ query, limit: '100', fmt: 'json' }), { headers: { Accept: 'application/json' } }); }
-    catch(e){ throw new Error('mbnet'); }
-    if (r.status === 503 || r.status === 429){ mbNext = Date.now() + 3000 * (i + 1); continue; }
+    catch(e){ mbNext = Date.now() + 2000 + 1000 * i; continue; }
+    if (r.status === 503 || r.status === 429){
+      const ra = Number(r.headers.get('Retry-After')) || 1;
+      mbNext = Date.now() + Math.min(15000, ra * 1000 + 800 * (i + 1) + Math.random() * 700);
+      continue;
+    }
     if (!r.ok) throw new Error('mb ' + r.status);
     return r.json();
   }
@@ -814,12 +833,20 @@ async function mbReleases(artists, run){
   const byNorm = new Map(artists.map(a => [norm(a.name), a]));
   const out = [], from = addDays(todayKey(), -REL_BACK_DAYS), skip = /compilation|dj-mix|interview|audiobook|spokenword|audio drama|field recording/i;
   const names = artists.map(a => a.name).filter(n => norm(n).length >= 2);
-  const per = 15;
-  for (let i = 0; i < names.length; i += per){
+  const per = 15, batches = [];
+  for (let i = 0; i < names.length; i += per) batches.push(names.slice(i, i + per));
+  const failed = [];
+  // Two passes: anything MusicBrainz turned away the first time gets another go at the end
+  for (let pass = 0; pass < 2; pass++){
+    const todo = pass === 0 ? batches : failed.splice(0);
+    for (let b = 0; b < todo.length; b++){
     if (run !== relRun) return null;
-    relProgressUpdate(`Looking up releases (${Math.min(i + per, names.length)} of ${names.length} artists)…`);
-    const batch = names.slice(i, i + per).map(luceneName).join(' OR ');
-    const d = await mb(`firstreleasedate:[${from} TO 2099-12-31] AND (artistname:(${batch}) OR artist:(${batch}))`);
+    const done = pass === 0 ? Math.min((b + 1) * per, names.length) : names.length;
+    relProgressUpdate(pass === 0 ? `Looking up releases (${done} of ${names.length} artists)…` : `Retrying ${todo.length - b} busy ${todo.length - b === 1 ? 'request' : 'requests'} on MusicBrainz…`);
+    const batch = todo[b].map(luceneName).join(' OR ');
+    let d;
+    try { d = await mb(`firstreleasedate:[${from} TO 2099-12-31] AND (artistname:(${batch}) OR artist:(${batch}))`); }
+    catch(e){ if (pass === 0) failed.push(todo[b]); else out.missed = (out.missed || []).concat(todo[b]); continue; }
     for (const g of (d['release-groups'] || [])){
       const date = g['first-release-date'] || '';
       const primary = g['primary-type'] || '';
@@ -834,13 +861,15 @@ async function mbReleases(artists, run){
       const cmp = date.length === 4 ? date + '-12-31' : date.length === 7 ? date + '-28' : date;
       if (cmp >= from) out.push(item);
     }
+    }
   }
   return out;
 }
+let rel_spLeft = 0;
 async function scanReleases(seenSnap){
   const artists = store.get('gigcal.artists', []) || [];
   if (!artists.length) return;
-  const run = ++relRun; relBusy = true;
+  const run = ++relRun; relBusy = true; rel_spLeft = 0;
   const seen = seenSnap || new Set([...seenAtStart, ...(store.get('gigcal.seen', []) || [])]);
   const prev = rel && rel.items ? rel.items : null;
   const prevById = new Map((prev || []).map(x => [x.id, x]));
@@ -867,7 +896,7 @@ async function scanReleases(seenSnap){
       r.firstSeen = old ? (old.firstSeen || 0) : (prev ? started : 0);
       r.seenNew = old ? (!!old.seenNew || seen.has(old.id)) : false;
     }
-    rel = { items, fetchedAt: Date.now(), artistCount: artists.length, problems: problems.slice() };
+    rel = { items, fetchedAt: Date.now(), artistCount: artists.length, problems: problems.slice(), spLeft: rel_spLeft, spResume: spPace.until };
     store.set('gigcal.releases', rel);
     if (done){ relBusy = false; relProgressUpdate(''); }
     if (view.mode === 'releases' || done) render();
@@ -877,27 +906,43 @@ async function scanReleases(seenSnap){
   relProgressUpdate('Looking up releases…');
   let mbItems = null;
   try { mbItems = await mbReleases(artists, run); }
-  catch(e){ problems.push('musicbrainz'); }
+  catch(e){ mbItems = { missed: artists.map(a => a.name) }; }
   if (run !== relRun) return;
-  if (mbItems === null) mbItems = (prev || []).filter(r => r.src === 'musicbrainz');   // keep the last good results
+  if (mbItems === null) return;
+  // For artists MusicBrainz couldn't answer for, keep their results from the last check
+  const missed = new Set((mbItems.missed || []).map(norm));
+  mbItems = [...mbItems];
+  if (missed.size){
+    problems.push(missed.size >= artists.length ? 'musicbrainz' : 'musicbrainz-some');
+    for (const old of (prev || [])) if (old.src === 'musicbrainz' && missed.has(norm(old.artist))) mbItems.push(old);
+  }
   publish(mbItems, false);
 
   // 2. Spotify, for artists not checked in the last few days
   const due = artists.filter(a => a.id && (!spCache[a.id] || Date.now() - spCache[a.id].t > SP_RECHECK_DAYS * 864e5));
-  for (let i = 0; i < due.length; i++){
+  let spLeft = 0;
+  if (due.length && Date.now() < spPace.until){ spLeft = due.length; problems.push('spotify-slow'); }   // still paused from last time
+  else for (let i = 0; i < due.length; i++){
     if (run !== relRun) return;
     const a = due[i];
     relProgressUpdate(`Checking Spotify for new music (${i + 1} of ${due.length})…`);
     try {
       spCache[a.id] = { t: Date.now(), items: await spArtistReleases(a) };
       store.set('gigcal.spRel', spCache);
+      if (++spPace.ok >= 25 && spPace.gap > 2000){ spPace.gap = Math.max(2000, Math.round(spPace.gap * 0.85)); spPace.ok = 0; }
+      saveSpPace();
     } catch(e){
       if (e.message === 'auth'){ problems.push('spotify-auth'); break; }
       if (e.message === 'spotify 403'){ problems.push('spotify'); break; }
-      if (/rate-limiting/.test(e.message)){ problems.push('spotify-slow'); break; }   // the rest are checked next time
+      if (e.message === 'sp429'){
+        // Spotify has asked us to pause: stop now, wait as long as it says, and go more slowly next time
+        spPace = { gap: Math.min(8000, Math.round(spPace.gap * 1.6)), until: Date.now() + Math.max(30, e.retry) * 1000, ok: 0 };
+        saveSpPace(); spLeft = due.length - i; problems.push('spotify-slow'); break;
+      }
     }
     if (i % 10 === 9) publish(mbItems, false);
   }
+  rel_spLeft = spLeft;
   if (run !== relRun) return;
   publish(mbItems, true);
   const fresh = rel.items.filter(r => r.firstSeen === started).length;
@@ -1298,10 +1343,14 @@ function releasesHTML(){
   const ago = Math.round((Date.now() - rel.fetchedAt) / 3600000);
   const when = ago < 1 ? 'within the last hour' : ago < 48 ? ago + ' hours ago' : Math.round(ago / 24) + ' days ago';
   const notes = [];
-  if (rel.problems.includes('musicbrainz')) notes.push('Couldn’t reach MusicBrainz, so upcoming releases may be missing or out of date.');
+  if (rel.problems.includes('musicbrainz')) notes.push('MusicBrainz was too busy to answer, so upcoming releases are from the last check. Try Check again in a few minutes.');
+  if (rel.problems.includes('musicbrainz-some')) notes.push('MusicBrainz was too busy for some artists, so their upcoming releases are from the last check.');
   if (rel.problems.includes('spotify')) notes.push('Spotify didn’t share recent releases this time.');
   if (rel.problems.includes('spotify-auth')) notes.push('Connect Spotify again to see recent releases.');
-  if (rel.problems.includes('spotify-slow')) notes.push('Spotify asked Earshot to slow down, so some artists will be checked next time.');
+  if (rel.problems.includes('spotify-slow')){
+    const at = rel.spResume && rel.spResume > Date.now() ? new Date(rel.spResume).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
+    notes.push(`Spotify asked Earshot to pause, so ${rel.spLeft || 'some'} ${rel.spLeft === 1 ? 'artist' : 'artists'} will be checked on Spotify next time${at ? ` (after ${at})` : ''}. Everything found so far is shown.`);
+  }
   let h = `<div class="rel-head">${kindSeg}<span class="rel-note">Checked ${esc(when)} for ${rel.artistCount} artists. <button class="linkish" data-rel-scan${relBusy ? ' disabled' : ''}>Check again</button></span></div>`;
   h += progress;
   if (notes.length) h += `<p class="rel-note alert">${esc(notes.join(' '))}</p>`;
@@ -1526,7 +1575,7 @@ $('#saveSet').onclick = saveSettings;
 $('#findPlace').onclick = lookupPlace;
 $('#place').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); lookupPlace(); } });
 $('#geoBtn').onclick = useGeo;
-$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; store.del('gigcal.spRel'); store.del('gigcal.releases'); store.del('gigcal.artists'); rel = null; relRun++; relBusy = false; view.wiz = 0; wizDraft = null; wizKeys = !settings.clientId || !settings.tmKey; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
+$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; store.del('gigcal.spRel'); store.del('gigcal.spPace'); store.del('gigcal.releases'); store.del('gigcal.artists'); rel = null; relRun++; relBusy = false; view.wiz = 0; wizDraft = null; wizKeys = !settings.clientId || !settings.tmKey; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
 $('#mainBtn').onclick = () => store.get('gigcal.token', null) ? scan() : connectSpotify();
 $('#prevBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() - 1, 1); view.sel = null; render(); };
 $('#nextBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() + 1, 1); view.sel = null; render(); };
