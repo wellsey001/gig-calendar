@@ -767,30 +767,29 @@ function relProgressUpdate(msg){
   const el = document.getElementById('relProgress');
   if (el) el.textContent = msg;
 }
-async function spRecentReleases(artists, run){
-  const out = [], since = addDays(todayKey(), -REL_BACK_DAYS);
-  const withId = artists.filter(a => a.id);
-  for (let i = 0; i < withId.length; i++){
-    if (run !== relRun) return null;
-    const a = withId[i];
-    relProgressUpdate(`Checking new music from ${a.name} (${i + 1} of ${withId.length})…`);
-    for (const group of ['album', 'single']){
-      let d;
-      try { d = await sp(`/artists/${encodeURIComponent(a.id)}/albums?include_groups=${group}&limit=10`); }
-      catch(e){ if (e.message === 'auth' || e.message === 'spotify 403') throw e; continue; }   // skip just this artist
-      for (const al of (d.items || [])){
-        const date = al.release_date || '';
-        if (!date) continue;
-        // Spotify gives day, month or year precision; only count full or partial dates in the window
-        const cmp = date.length === 4 ? date + '-12-31' : date.length === 7 ? date + '-28' : date;
-        if (cmp < since) continue;
-        out.push({ id: 'sp-' + al.id, src: 'spotify', title: al.name || '', artist: a.name,
-          credits: (al.artists || []).map(x => x.name), kind: relKind(al.album_type, al.total_tracks),
-          date, img: (al.images || []).slice().sort((x, y) => (x.width || 640) - (y.width || 640)).find(im => (im.width || 640) >= 200)?.url || al.images?.[0]?.url || '',
-          artistImg: a.img || '', url: al.external_urls?.spotify || '' });
-      }
-      await sleep(120);
-    }
+/* Spotify: one request per artist, spaced out so Spotify never makes us wait,
+   and each artist is only re-checked every few days (progress is kept between checks). */
+const SP_RECHECK_DAYS = 3, SP_GAP_MS = 1500;
+let spNext = 0, spLimit = 20;
+async function spArtistReleases(a){
+  const since = addDays(todayKey(), -REL_BACK_DAYS);
+  let d;
+  for (let tries = 0; tries < 2; tries++){
+    const wait = spNext - Date.now(); if (wait > 0) await sleep(wait);
+    spNext = Date.now() + SP_GAP_MS;
+    try { d = await sp(`/artists/${encodeURIComponent(a.id)}/albums?include_groups=album,single&limit=${spLimit}`); break; }
+    catch(e){ if (e.message === 'spotify 400' && spLimit > 10){ spLimit = 10; continue; } throw e; }
+  }
+  const out = [];
+  for (const al of (d?.items || [])){
+    const date = al.release_date || '';
+    if (!date) continue;
+    const cmp = date.length === 4 ? date + '-12-31' : date.length === 7 ? date + '-28' : date;
+    if (cmp < since) continue;
+    out.push({ id: 'sp-' + al.id, src: 'spotify', title: al.name || '', artist: a.name,
+      credits: (al.artists || []).map(x => x.name), kind: relKind(al.album_type, al.total_tracks),
+      date, img: (al.images || []).slice().sort((x, y) => (x.width || 640) - (y.width || 640)).find(im => (im.width || 640) >= 200)?.url || al.images?.[0]?.url || '',
+      artistImg: a.img || '', url: al.external_urls?.spotify || '' });
   }
   return out;
 }
@@ -810,16 +809,17 @@ async function mb(query){
   throw new Error('mbbusy');
 }
 const luceneName = n => '"' + String(n).replace(/[\\"]/g, ' ').trim() + '"';
-async function mbUpcoming(artists, run){
+// MusicBrainz: recent and announced releases for 15 artists per request, so 150 artists take about 10 seconds
+async function mbReleases(artists, run){
   const byNorm = new Map(artists.map(a => [norm(a.name), a]));
-  const out = [], t = todayKey(), skip = /compilation|dj-mix|interview|audiobook|spokenword|audio drama|field recording/i;
+  const out = [], from = addDays(todayKey(), -REL_BACK_DAYS), skip = /compilation|dj-mix|interview|audiobook|spokenword|audio drama|field recording/i;
   const names = artists.map(a => a.name).filter(n => norm(n).length >= 2);
   const per = 15;
   for (let i = 0; i < names.length; i += per){
     if (run !== relRun) return null;
-    relProgressUpdate(`Looking for announced releases (${Math.min(i + per, names.length)} of ${names.length} artists)…`);
+    relProgressUpdate(`Looking up releases (${Math.min(i + per, names.length)} of ${names.length} artists)…`);
     const batch = names.slice(i, i + per).map(luceneName).join(' OR ');
-    const d = await mb(`firstreleasedate:[${t} TO 2099-12-31] AND (artistname:(${batch}) OR artist:(${batch}))`);
+    const d = await mb(`firstreleasedate:[${from} TO 2099-12-31] AND (artistname:(${batch}) OR artist:(${batch}))`);
     for (const g of (d['release-groups'] || [])){
       const date = g['first-release-date'] || '';
       const primary = g['primary-type'] || '';
@@ -831,7 +831,8 @@ async function mbUpcoming(artists, run){
       const item = { id: 'mb-' + g.id, src: 'musicbrainz', title: g.title || '', artist: match.name, credits,
         kind: relKind(primary), date, img: `https://coverartarchive.org/release-group/${g.id}/front-250`,
         artistImg: match.img || '', url: `https://musicbrainz.org/release-group/${g.id}` };
-      if (relUpcoming(item)) out.push(item);
+      const cmp = date.length === 4 ? date + '-12-31' : date.length === 7 ? date + '-28' : date;
+      if (cmp >= from) out.push(item);
     }
   }
   return out;
@@ -841,47 +842,66 @@ async function scanReleases(seenSnap){
   if (!artists.length) return;
   const run = ++relRun; relBusy = true;
   const seen = seenSnap || new Set([...seenAtStart, ...(store.get('gigcal.seen', []) || [])]);
-  relProgressUpdate('Checking for new music…');
-  if (view.mode === 'releases') render();
-  const problems = [];
-  let recent = [], upcoming = [];
-  try { recent = await spRecentReleases(artists, run); }
-  catch(e){ recent = []; problems.push(e.message === 'auth' ? 'spotify-auth' : 'spotify'); }
-  if (recent === null) return;
-  try { upcoming = await mbUpcoming(artists, run); }
-  catch(e){ upcoming = []; problems.push('musicbrainz'); }
-  if (upcoming === null || run !== relRun) return;
-  // Merge: one entry per artist and title; prefer Spotify's artwork and link
-  const merged = new Map();
-  for (const r of [...recent, ...upcoming]){
-    const k = norm(r.artist) + '|' + norm(r.title);
-    const had = merged.get(k);
-    if (!had){ merged.set(k, r); continue; }
-    if (had.src !== 'spotify' && r.src === 'spotify') merged.set(k, Object.assign({}, r, { mbUrl: had.url }));
-    else if (had.src === 'spotify' && r.src !== 'spotify' && !had.mbUrl) had.mbUrl = r.url;
-  }
-  const items = [...merged.values()];
-  // "New" labels, the same way as gigs: anything not there at the last check
   const prev = rel && rel.items ? rel.items : null;
   const prevById = new Map((prev || []).map(x => [x.id, x]));
   const prevByKey = new Map((prev || []).map(x => [norm(x.artist) + '|' + norm(x.title), x]));
-  const now = Date.now();
-  for (const r of items){
-    const old = prevById.get(r.id) || prevByKey.get(norm(r.artist) + '|' + norm(r.title));
-    r.firstSeen = old ? (old.firstSeen || 0) : (prev ? now : 0);
-    r.seenNew = old ? (!!old.seenNew || seen.has(old.id)) : false;
+  const started = Date.now(), since = addDays(todayKey(), -REL_BACK_DAYS);
+  const problems = [];
+  const spCache = store.get('gigcal.spRel', {}) || {};
+  if (view.mode === 'releases') render();
+
+  // Combine both sources into one list: one entry per artist and title, preferring Spotify's artwork and link
+  const publish = (mbItems, done) => {
+    const spItems = artists.flatMap(a => (a.id && spCache[a.id] ? spCache[a.id].items : []))
+      .filter(r => (r.date.length === 4 ? r.date + '-12-31' : r.date.length === 7 ? r.date + '-28' : r.date) >= since);
+    const merged = new Map();
+    for (const r of [...spItems, ...mbItems]){
+      const k = norm(r.artist) + '|' + norm(r.title);
+      const had = merged.get(k);
+      if (!had){ merged.set(k, Object.assign({}, r)); continue; }
+      if (had.src === 'spotify' && r.src !== 'spotify' && !had.mbUrl) had.mbUrl = r.url;
+    }
+    const items = [...merged.values()];
+    for (const r of items){
+      const old = prevById.get(r.id) || prevByKey.get(norm(r.artist) + '|' + norm(r.title));
+      r.firstSeen = old ? (old.firstSeen || 0) : (prev ? started : 0);
+      r.seenNew = old ? (!!old.seenNew || seen.has(old.id)) : false;
+    }
+    rel = { items, fetchedAt: Date.now(), artistCount: artists.length, problems: problems.slice() };
+    store.set('gigcal.releases', rel);
+    if (done){ relBusy = false; relProgressUpdate(''); }
+    if (view.mode === 'releases' || done) render();
+  };
+
+  // 1. MusicBrainz first: quick, and covers announced releases
+  relProgressUpdate('Looking up releases…');
+  let mbItems = null;
+  try { mbItems = await mbReleases(artists, run); }
+  catch(e){ problems.push('musicbrainz'); }
+  if (run !== relRun) return;
+  if (mbItems === null) mbItems = (prev || []).filter(r => r.src === 'musicbrainz');   // keep the last good results
+  publish(mbItems, false);
+
+  // 2. Spotify, for artists not checked in the last few days
+  const due = artists.filter(a => a.id && (!spCache[a.id] || Date.now() - spCache[a.id].t > SP_RECHECK_DAYS * 864e5));
+  for (let i = 0; i < due.length; i++){
+    if (run !== relRun) return;
+    const a = due[i];
+    relProgressUpdate(`Checking Spotify for new music (${i + 1} of ${due.length})…`);
+    try {
+      spCache[a.id] = { t: Date.now(), items: await spArtistReleases(a) };
+      store.set('gigcal.spRel', spCache);
+    } catch(e){
+      if (e.message === 'auth'){ problems.push('spotify-auth'); break; }
+      if (e.message === 'spotify 403'){ problems.push('spotify'); break; }
+      if (/rate-limiting/.test(e.message)){ problems.push('spotify-slow'); break; }   // the rest are checked next time
+    }
+    if (i % 10 === 9) publish(mbItems, false);
   }
-  // Keep a failed source's previous results rather than wiping them
-  if (prev){
-    const keepSrc = problems.includes('musicbrainz') ? 'musicbrainz' : problems.some(p => p.startsWith('spotify')) ? 'spotify' : '';
-    if (keepSrc) for (const old of prev) if (old.src === keepSrc && !items.some(x => x.id === old.id)) items.push(old);
-  }
-  rel = { items, fetchedAt: now, artistCount: artists.length, problems };
-  store.set('gigcal.releases', rel);
-  relBusy = false; relProgressUpdate('');
-  const fresh = items.filter(r => r.firstSeen === now).length;
+  if (run !== relRun) return;
+  publish(mbItems, true);
+  const fresh = rel.items.filter(r => r.firstSeen === started).length;
   if (fresh && view.mode !== 'releases') setStatus(($('#status').textContent ? $('#status').textContent + ' ' : '') + `Found ${fresh} new ${fresh === 1 ? 'release' : 'releases'}. See the Releases tab.`);
-  render();
 }
 
 /* ---------- Distance ---------- */
@@ -1238,6 +1258,7 @@ function relCard(r){
   const up = relUpcoming(r);
   const more = r.credits && r.credits.length > 1 ? r.credits.join(', ') : r.artist;
   const acts = [];
+  if (r.src !== 'spotify' && !up) acts.push(`<a class="chip" href="https://open.spotify.com/search/${encodeURIComponent(r.artist + ' ' + r.title)}" target="_blank" rel="noopener">Find on Spotify</a>`);
   if (r.src === 'spotify' && r.url) acts.push(`<a class="chip" href="${esc(r.url)}" target="_blank" rel="noopener">${up ? 'Open in Spotify' : 'Play on Spotify'}</a>`);
   if (up && fullDate(r.date)) acts.push(`<button class="chip" data-rel-ics="${esc(r.id)}">Add to calendar</button>`);
   const mbLink = r.src === 'musicbrainz' ? r.url : r.mbUrl;
@@ -1263,7 +1284,7 @@ function releasesHTML(){
   const artists = store.get('gigcal.artists', []) || [];
   const progress = `<p class="rel-note" id="relProgress" role="status">${relBusy ? esc(relProgress) : ''}</p>`;
   if (!rel){
-    if (relBusy) return `<div class="rel-head">${progress}</div><div class="empty"><h2>Checking your artists for new music…</h2><p>Earshot is looking up recent releases on Spotify and announced albums on MusicBrainz. This takes a couple of minutes, and the gigs tabs keep working meanwhile.</p></div>`;
+    if (relBusy) return `<div class="rel-head">${progress}</div><div class="empty"><h2>Checking your artists for new music…</h2><p>Earshot is looking up releases on MusicBrainz and Spotify. The first results appear in a few seconds, and more fill in as Spotify is checked.</p></div>`;
     return `<div class="empty"><h2>New music from your artists</h2><p>${artists.length ? 'Check your artists for recent and upcoming albums, EPs and singles.' : 'Releases are checked after each scan. Choose <b>Scan again</b> to look for new music from your artists.'}</p>${artists.length ? '<button class="btn primary" data-rel-scan>Check for new music</button>' : ''}</div>`;
   }
   const q = view.q.trim().toLowerCase();
@@ -1280,6 +1301,7 @@ function releasesHTML(){
   if (rel.problems.includes('musicbrainz')) notes.push('Couldn’t reach MusicBrainz, so upcoming releases may be missing or out of date.');
   if (rel.problems.includes('spotify')) notes.push('Spotify didn’t share recent releases this time.');
   if (rel.problems.includes('spotify-auth')) notes.push('Connect Spotify again to see recent releases.');
+  if (rel.problems.includes('spotify-slow')) notes.push('Spotify asked Earshot to slow down, so some artists will be checked next time.');
   let h = `<div class="rel-head">${kindSeg}<span class="rel-note">Checked ${esc(when)} for ${rel.artistCount} artists. <button class="linkish" data-rel-scan${relBusy ? ' disabled' : ''}>Check again</button></span></div>`;
   h += progress;
   if (notes.length) h += `<p class="rel-note alert">${esc(notes.join(' '))}</p>`;
@@ -1504,7 +1526,7 @@ $('#saveSet').onclick = saveSettings;
 $('#findPlace').onclick = lookupPlace;
 $('#place').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); lookupPlace(); } });
 $('#geoBtn').onclick = useGeo;
-$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; store.del('gigcal.releases'); store.del('gigcal.artists'); rel = null; relRun++; relBusy = false; view.wiz = 0; wizDraft = null; wizKeys = !settings.clientId || !settings.tmKey; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
+$('#disconnectBtn').onclick = () => { store.del('gigcal.token'); store.del('gigcal.cache'); cache = null; store.del('gigcal.spRel'); store.del('gigcal.releases'); store.del('gigcal.artists'); rel = null; relRun++; relBusy = false; view.wiz = 0; wizDraft = null; wizKeys = !settings.clientId || !settings.tmKey; $('#settingsDlg').close(); updateButtons(); render(); setStatus('Spotify disconnected and the scan results cleared. To use another account, choose Connect Spotify, then “Not you?” on Spotify’s page.'); };
 $('#mainBtn').onclick = () => store.get('gigcal.token', null) ? scan() : connectSpotify();
 $('#prevBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() - 1, 1); view.sel = null; render(); };
 $('#nextBtn').onclick = () => { view.month = new Date(view.month.getFullYear(), view.month.getMonth() + 1, 1); view.sel = null; render(); };

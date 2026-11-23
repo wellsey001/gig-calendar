@@ -88,10 +88,10 @@ Your picks are kept when you scan again.
 
 ### Releases
 
-New music from the artists Earshot scanned, checked in the background after each scan. Gig results appear first, and the Releases tab fills in a couple of minutes later.
+New music from the artists Earshot scanned, checked in the background after each scan. The first releases appear within seconds, and more fill in as each artist is checked on Spotify. Spotify only allows a request every second or so, so each artist is re-checked there every three days rather than on every scan.
 
 - **Coming soon** lists announced albums, EPs and singles, with a countdown. These come from [MusicBrainz](https://musicbrainz.org), a free, volunteer-run music database, so big releases usually appear but smaller artists may show up late or not at all. Releases with only a month or year announced show as “Expected March 2027” or “Expected 2027”.
-- **Out recently** lists releases from the last 90 days, straight from Spotify, with a **Play on Spotify** button.
+- **Out recently** lists releases from the last 90 days, from Spotify and MusicBrainz, with a **Play on Spotify** or **Find on Spotify** button.
 - Use **Everything**, **Albums & EPs** or **Singles** to narrow the list, and the search box to find an artist or title.
 - **Add to calendar** saves an upcoming release date to your calendar. **Export to calendar** on this tab saves every upcoming release that has a confirmed date.
 - Releases that appeared since the last check get a **New** label, like gigs.
